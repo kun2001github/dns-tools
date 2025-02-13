@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS 查询工具</title>
+    <style>
+        /* 全局样式 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 容器样式 */
+        .container {
+            display: flex;
+            gap: 20px;
+            width: 80%;
+            max-width: 1000px;
+            margin-bottom: 20px;
+        }
+
+        /* 输入框和 DNS 服务器框样式 */
+        .input-box,
+        .dns-box {
+            flex: 1;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        /* 标签样式 */
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        /* 文本区域样式 */
+        textarea {
+            width: 100%;
+            height: 150px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 14px;
+            resize: none;
+            box-sizing: border-box;
+        }
+
+        /* 查询按钮样式 */
+        button {
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            padding: 25px 300px; /* 增加左右内边距，使按钮加长 */
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* 查询结果区域样式 */
+        #result {
+            width: 100%;
+            max-width: 90%;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-top: 20px;
+            display: grid; /* 使用网格布局 */
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* 自动调整列宽 */
+            gap: 20px; /* 列间距 */
+        }
+
+        /* DNS 服务器标题样式 */
+        #result h3 {
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        /* 结果列表样式 */
+        #result ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #result li {
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        /* 错误信息样式 */
+        #result li.error {
+            color: #dc3545;
+        }
+
+        /* 底部信息样式 */
+        .footer-info {
+            margin-top: 30px;
+            font-size: 14px;
+            color: #777;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="input-box">
+            <label for="domains">输入需要查询的网站（每行一个）:</label>
+            <textarea id="domains" placeholder="例如: example.com"></textarea>
+        </div>
+        <div class="dns-box">
+            <label for="dns_servers">当前使用的 DNS 服务器 (每行一个):</label>
+            <textarea id="dns_servers">202.96.128.166
+183.240.8.114
+8.8.8.8</textarea>
+        </div>
+    </div>
+    <button onclick="queryDNS()" style="font-size: 30px;">查询</button>
+    <div id="result"></div>
+
+    <!-- 新增底部信息 -->
+    <div class="footer-info">
+        Mobvista-IT小工具-DNS批量查询
+    </div>
+
+    <script>
+        async function queryDNS() {
+            const domains = document.getElementById('domains').value.trim().split('\n').filter(domain => domain);
+            const dns_servers = document.getElementById('dns_servers').value.trim().split('\n');
+
+            if (domains.length === 0) {
+                alert('请输入需要查询的网站');
+                return;
+            }
+
+            try {
+                const response = await fetch('/query_dns', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        domains: domains,
+                        dns_servers: dns_servers
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = '';
+
+                for (const [domain, domainResults] of Object.entries(data)) {
+                    const domainColumn = document.createElement('div');
+                    domainColumn.classList.add('domain-column');
+
+                    const domainHeading = document.createElement('h2');
+                    domainHeading.textContent = `域名: ${domain}`;
+                    domainColumn.appendChild(domainHeading);
+
+                    for (const [dns_server, serverResults] of Object.entries(domainResults)) {
+                        const dnsHeading = document.createElement('h3');
+                        dnsHeading.textContent = `DNS 服务器: ${dns_server}`;
+                        domainColumn.appendChild(dnsHeading);
+
+                        // 显示 A 记录
+                        const aRecordList = document.createElement('ul');
+                        const aRecordHeading = document.createElement('li');
+                        aRecordHeading.textContent = 'A 记录:';
+                        aRecordList.appendChild(aRecordHeading);
+                        if (Array.isArray(serverResults.A)) {
+                            serverResults.A.forEach(address => {
+                                const listItem = document.createElement('li');
+                                listItem.textContent = address;
+                                aRecordList.appendChild(listItem);
+                            });
+                        } else {
+                            const errorItem = document.createElement('li');
+                            errorItem.textContent = `错误: ${serverResults.A}`;
+                            errorItem.classList.add('error');
+                            aRecordList.appendChild(errorItem);
+                        }
+                        domainColumn.appendChild(aRecordList);
+
+                        // 显示 CNAME 记录
+                        const cnameRecordList = document.createElement('ul');
+                        const cnameRecordHeading = document.createElement('li');
+                        cnameRecordHeading.textContent = 'CNAME 记录:';
+                        cnameRecordList.appendChild(cnameRecordHeading);
+                        if (Array.isArray(serverResults.CNAME)) {
+                            serverResults.CNAME.forEach(cname => {
+                                const listItem = document.createElement('li');
+                                listItem.textContent = cname;
+                                cnameRecordList.appendChild(listItem);
+                            });
+                        } else {
+                            const errorItem = document.createElement('li');
+                            errorItem.textContent = `错误: ${serverResults.CNAME}`;
+                            errorItem.classList.add('error');
+                            cnameRecordList.appendChild(errorItem);
+                        }
+                        domainColumn.appendChild(cnameRecordList);
+                    }
+
+                    resultDiv.appendChild(domainColumn);
+                }
+            } catch (error) {
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = `<p class="error">查询失败: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+
+</html>
