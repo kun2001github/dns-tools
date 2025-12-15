@@ -13,6 +13,11 @@
 - 📱 **响应式设计**：三栏式布局，适配不同屏幕尺寸
 - 💾 **数据持久化**：DNS配置和历史记录自动保存
 
+## 功能展示图
+
+![DNS Tools](./Images/home.png)
+![DNS Tools](./Images/content.png)
+
 ## 安装与运行
 
 ### Windows 本地调试
