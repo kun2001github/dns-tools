@@ -1,232 +1,638 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DNS 查询工具</title>
+    <title>DNS Pro 批量查询工具</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --accent-color: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --text-main: #f1f5f9;
+            --text-dim: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --error-color: #ef4444;
+            --error-hover: #dc2626;
+            --success-color: #22c55e;
+        }
+
         /* 全局样式 */
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f4f9;
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 100%);
+            color: var(--text-main);
             margin: 0;
             padding: 20px;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
 
-        /* 容器样式 */
-        .container {
-            display: flex;
+        .main-container {
+            width: 95%;
+            max-width: 1400px;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h3 { color: var(--accent-color); font-weight: 600; margin-top: 0; }
+
+        /* 布局卡片 */
+        .three-column-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
-            width: 80%;
-            max-width: 1000px;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
 
-        /* 输入框和 DNS 服务器框样式 */
-        .input-box,
-        .dns-box {
-            flex: 1;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            padding: 20px;
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            transition: border-color 0.3s ease;
         }
 
-        /* 标签样式 */
-        label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #333;
+        .glass-card:hover {
+            border-color: rgba(56, 189, 248, 0.4);
         }
 
-        /* 文本区域样式 */
         textarea {
             width: 100%;
-            height: 150px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            padding: 10px;
-            font-size: 14px;
+            height: 180px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--accent-color);
+            padding: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
             resize: none;
             box-sizing: border-box;
+            outline: none;
+            transition: all 0.3s ease;
         }
 
-        /* 查询按钮样式 */
-        button {
-            background-color: #007BFF;
-            color: #fff;
-            border: none;
-            border-radius: 50px;
-            padding: 25px 300px; /* 增加左右内边距，使按钮加长 */
-            font-size: 16px;
+        textarea:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+
+        /* 按钮系统 */
+        .btn {
             cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        /* 查询结果区域样式 */
-        #result {
-            width: 100%;
-            max-width: 90%;
-            background-color: #fff;
+            border: none;
             border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-top: 20px;
-            display: grid; /* 使用网格布局 */
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* 自动调整列宽 */
-            gap: 20px; /* 列间距 */
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
-        /* DNS 服务器标题样式 */
-        #result h3 {
-            color: #333;
-            margin-top: 0;
+        .btn-primary {
+            background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-dim);
+        }
+
+        .query-main-btn {
+            font-size: 1.5rem;
+            padding: 16px 80px;
+            border-radius: 50px;
+            margin: 40px auto;
+            display: block;
+            letter-spacing: 4px;
+        }
+
+        /* 历史记录面板与条目 */
+        .history-panel {
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .history-item {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            position: relative; /* 为删除按钮提供定位基准 */
+            transition: all 0.2s ease;
+        }
+
+        .history-item:hover {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: var(--accent-color);
+        }
+
+        /* 优化后的删除按钮 */
+        .delete-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 26px;
+            height: 26px;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error-color);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+
+        .delete-btn:hover {
+            background: var(--error-color);
+            color: white;
+            transform: scale(1.1);
+        }
+
+        /* 删除确认提示样式 */
+        .delete-confirm {
+            position: absolute;
+            top: 45px;
+            right: 12px;
+            background: var(--error-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            animation: fadeIn 0.2s ease-out;
+            white-space: nowrap;
+        }
+
+        .delete-confirm:hover {
+            background: #c82333;
+            transform: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 清空确认提示样式 */
+        .clear-confirm {
+            position: absolute;
+            top: 35px;
+            right: 0;
+            background: var(--error-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            animation: fadeIn 0.2s ease-out;
+            white-space: nowrap;
+        }
+
+        .clear-confirm:hover {
+            background: #c82333;
+        }
+
+        .delete-btn svg {
+            width: 14px;
+            height: 14px;
+            stroke-width: 2.5;
+        }
+
+        .history-header {
+            margin-bottom: 12px;
+            padding-right: 25px; /* 为删除按钮预留空间 */
+        }
+
+        .history-time {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono';
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .history-domains {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--accent-color);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+
+        /* 详情区域 */
+        .history-details {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed var(--border-color);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .history-details.show { display: block; }
+
+        .detail-server-block {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 10px;
             margin-bottom: 10px;
         }
 
-        /* 结果列表样式 */
-        #result ul {
-            list-style-type: none;
-            padding: 0;
-            margin: 0;
+        .server-name {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-bottom: 5px;
+            border-left: 3px solid var(--accent-color);
+            padding-left: 8px;
         }
 
-        #result li {
-            margin-bottom: 8px;
-            color: #555;
+        .record-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-right: 5px;
+            background: rgba(56, 189, 248, 0.1);
+            color: var(--accent-color);
         }
 
-        /* 错误信息样式 */
-        #result li.error {
-            color: #dc3545;
+        .record-value {
+            font-family: 'JetBrains Mono';
+            font-size: 0.85rem;
+            word-break: break-all;
+            color: #e2e8f0;
         }
 
-        /* 底部信息样式 */
-        .footer-info {
-            margin-top: 30px;
-            font-size: 14px;
-            color: #777;
-        }
+        /* 进度条 */
+        .progress-container { width: 100%; margin: 20px 0; display: none; }
+        .progress-bar { height: 6px; background: #1e293b; border-radius: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); width: 0%; box-shadow: 0 0 10px var(--accent-color); transition: width 0.3s ease; }
+
+        /* 查询结果 */
+        #result { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; width: 100%; }
+        .result-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; }
+        .domain-title { font-size: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px; color: white; display: flex; align-items: center; gap: 10px; }
+        .domain-title::before { content: ''; width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; box-shadow: 0 0 8px var(--success-color); }
+
+        .footer-info { margin-top: 50px; padding: 20px; color: var(--text-dim); font-size: 0.8rem; letter-spacing: 2px; }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        @media (max-width: 1024px) { .three-column-container { grid-template-columns: 1fr; } }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <div class="input-box">
-            <label for="domains">输入需要查询的网站（每行一个）:</label>
-            <textarea id="domains" placeholder="例如: example.com"></textarea>
+    <div class="main-container">
+        <div style="text-align: center; margin-bottom: 40px;">
+            <h1 style="font-size: 2.5rem; margin-bottom: 10px; background: linear-gradient(to right, #fff, #38bdf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">DNS ANALYST PRO</h1>
+            <p style="color: var(--text-dim);">高效、精准、批量化域名解析分析系统</p>
         </div>
-        <div class="dns-box">
-            <label for="dns_servers">当前使用的 DNS 服务器 (每行一个):</label>
-            <textarea id="dns_servers">202.96.128.166
-183.240.8.114
-8.8.8.8</textarea>
-        </div>
-    </div>
-    <button onclick="queryDNS()" style="font-size: 30px;">查询</button>
-    <div id="result"></div>
 
-    <!-- 新增底部信息 -->
-    <div class="footer-info">
-        Mobvista-IT小工具-DNS批量查询
+        <div class="three-column-container">
+            <!-- 左边：节点配置 -->
+            <div class="glass-card">
+                <h3><span style="margin-right:8px;">⚙️</span> 节点配置</h3>
+                <label>DNS 服务器 (IP # 标签):</label>
+                <textarea id="dns_servers">202.96.128.166 # 电信DNS
+183.240.8.114 # 联通DNS
+8.8.8.8 # 谷歌DNS</textarea>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button onclick="saveDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px;">保存配置</button>
+                    <button onclick="loadDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px;">加载配置</button>
+                </div>
+            </div>
+
+            <!-- 中间：目标域名 -->
+            <div class="glass-card">
+                <h3><span style="margin-right:8px;">🎯</span> 目标域名</h3>
+                <label>输入需要查询的网站（每行一个或用逗号分隔）:</label>
+                <textarea id="domains" placeholder="example.com&#10;google.com&#10;或: www.baidu.com,google.com,youtube.com"></textarea>
+            </div>
+
+            <!-- 右边：历史溯源 -->
+            <div class="glass-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin:0;"><span style="margin-right:8px;">📜</span> 历史溯源</h3>
+                    <div style="position: relative;">
+                        <button id="clearHistoryBtn" onclick="clearHistory()" class="btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 4px 12px; font-size: 0.8rem; border-radius: 4px;">清空全部</button>
+                    </div>
+                </div>
+                <div id="historyList" class="history-panel"></div>
+            </div>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div id="progressText" style="text-align:center; font-size:0.8rem; color:var(--accent-color); margin-top:8px;">Ready</div>
+        </div>
+
+        <button onclick="queryDNS()" class="btn btn-primary query-main-btn">RUN QUERY</button>
+
+        <div id="result"></div>
+
+        <div class="footer-info">
+            StandardSoftware IT TOOLBOX &copy; 2025 // DNS BATCH ANALYZER V2.0
+        </div>
     </div>
 
     <script>
-        async function queryDNS() {
-            const domains = document.getElementById('domains').value.trim().split('\n').filter(domain => domain);
-            const dns_servers = document.getElementById('dns_servers').value.trim().split('\n');
+        window.onload = function() {
+            loadDNSConfig();
+            loadHistory();
+        };
 
-            if (domains.length === 0) {
-                alert('请输入需要查询的网站');
+        // 核心展示逻辑：渲染历史记录
+        function displayHistory(history) {
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '';
+
+            if (history.length === 0) {
+                historyList.innerHTML = '<div style="text-align:center; color:var(--text-dim); margin-top:40px; font-size:0.9rem;">暂无查询记录</div>';
                 return;
             }
+
+            history.forEach(record => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                
+                // 使用 SVG 作为删除按钮图标
+                historyItem.innerHTML = `
+                    <div class="delete-btn" onclick="deleteHistoryItem('${record.id}')" title="删除记录">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                    </div>
+                    <div class="history-header">
+                        <span class="history-time">${record.date} ${record.time}</span>
+                        <div class="history-domains" title="${record.domains.join(', ')}">${record.domains.join(', ')}</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="copyToDomains('${record.domains.join('\\n')}')">填入</button>
+                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="toggleHistoryDetail('${record.id}')">详情</button>
+                    </div>
+                    <div class="history-details" id="detail-${record.id}">
+                        ${generateHistoryDetailContent(record)}
+                    </div>
+                `;
+                historyList.appendChild(historyItem);
+            });
+        }
+
+        // 生成详细内容
+        function generateHistoryDetailContent(record) {
+            let html = `<div style="font-size:0.8rem; margin-bottom:10px;"><span style="color:var(--text-dim)">查询详情:</span></div>`;
+            if (record.results) {
+                for (const [domain, domainResults] of Object.entries(record.results)) {
+                    html += `<div style="margin-bottom:12px;">
+                        <div style="color:var(--accent-color); font-size:0.85rem; font-weight:600; margin-bottom:5px;">${domain}</div>`;
+                    for (const [dnsServer, serverResults] of Object.entries(domainResults)) {
+                        html += `<div class="detail-server-block">
+                            <div class="server-name">${dnsServer}</div>`;
+                        if (serverResults.A) {
+                            const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
+                            ips.forEach(ip => { html += `<div><span class="record-tag">A</span><span class="record-value">${ip}</span></div>`; });
+                        }
+                        if (serverResults.CNAME) {
+                            const cnames = Array.isArray(serverResults.CNAME) ? serverResults.CNAME : [serverResults.CNAME];
+                            cnames.forEach(cn => { html += `<div><span class="record-tag" style="color:#818cf8; background:rgba(129,140,248,0.1)">CNAME</span><span class="record-value">${cn}</span></div>`; });
+                        }
+                        html += `</div>`;
+                    }
+                    html += `</div>`;
+                }
+            }
+            return html;
+        }
+
+        function toggleHistoryDetail(id) {
+            const el = document.getElementById(`detail-${id}`);
+            el.classList.toggle('show');
+        }
+
+        // 显示删除确认提示
+        function showDeleteConfirm(recordId) {
+            const confirmBtn = document.getElementById(`confirm-${recordId}`);
+            if (confirmBtn) {
+                // 隐藏确认按钮
+                confirmBtn.remove();
+            } else {
+                // 创建确认按钮
+                const historyItem = document.querySelector(`[onclick*="${recordId}"]`).closest('.history-item');
+                const confirmButton = document.createElement('button');
+                confirmButton.className = 'delete-confirm';
+                confirmButton.id = `confirm-${recordId}`;
+                confirmButton.textContent = '确认删除';
+                confirmButton.onclick = () => confirmDelete(recordId);
+                historyItem.appendChild(confirmButton);
+                
+                // 3秒后自动隐藏
+                setTimeout(() => {
+                    if (document.getElementById(`confirm-${recordId}`)) {
+                        confirmButton.remove();
+                    }
+                }, 3000);
+            }
+        }
+
+        // 确认删除
+        async function confirmDelete(recordId) {
+            try {
+                const response = await fetch('/delete_dns_history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ record_id: recordId })
+                });
+                if (response.ok) loadHistory();
+            } catch (error) { alert('删除失败'); }
+        }
+
+        // 删除单个历史记录
+        async function deleteHistoryItem(recordId) {
+            showDeleteConfirm(recordId);
+        }
+
+        function copyToDomains(text) {
+            document.getElementById('domains').value = text.replace(/\\n/g, '\n');
+            document.getElementById('domains').focus();
+        }
+
+        async function saveDNSConfig() {
+            const dns_servers = document.getElementById('dns_servers').value.trim().split('\n').filter(s => s);
+            try {
+                await fetch('/save_dns_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dns_servers })
+                });
+                alert('✅ 配置已保存');
+            } catch (e) { alert('❌ 保存失败'); }
+        }
+
+        async function loadDNSConfig() {
+            try {
+                const res = await fetch('/get_dns_config');
+                const data = await res.json();
+                if (data.dns_servers) document.getElementById('dns_servers').value = data.dns_servers.join('\n');
+            } catch (e) {}
+        }
+
+        async function loadHistory() {
+            try {
+                const res = await fetch('/get_dns_history');
+                const data = await res.json();
+                displayHistory(data.history || []);
+            } catch (e) {}
+        }
+
+        // 显示清空确认提示
+        function showClearConfirm() {
+            const confirmBtn = document.getElementById('clear-confirm-btn');
+            if (confirmBtn) {
+                // 隐藏确认按钮
+                confirmBtn.remove();
+            } else {
+                // 创建确认按钮
+                const clearBtn = document.getElementById('clearHistoryBtn');
+                const confirmButton = document.createElement('button');
+                confirmButton.className = 'clear-confirm';
+                confirmButton.id = 'clear-confirm-btn';
+                confirmButton.textContent = '确认清空全部';
+                confirmButton.onclick = () => confirmClearAll();
+                clearBtn.parentElement.appendChild(confirmButton);
+                
+                // 3秒后自动隐藏
+                setTimeout(() => {
+                    if (document.getElementById('clear-confirm-btn')) {
+                        confirmButton.remove();
+                    }
+                }, 3000);
+            }
+        }
+
+        // 确认清空所有历史记录
+        async function confirmClearAll() {
+            try {
+                await fetch('/clear_dns_history', { method: 'POST' });
+                loadHistory();
+            } catch (error) {
+                alert('清空失败');
+            }
+        }
+
+        // 清空历史记录（入口函数）
+        async function clearHistory() {
+            showClearConfirm();
+        }
+
+        async function queryDNS() {
+            // 优化域名输入：支持换行和逗号分割
+            const domainInput = document.getElementById('domains').value.trim();
+            const domains = domainInput
+                .split(/[,\n]/) // 支持逗号和换行分割
+                .map(d => d.trim()) // 去除空格
+                .filter(d => d); // 过滤空值
+            
+            const dns_servers = document.getElementById('dns_servers').value.trim().split('\n').filter(s => s);
+            if (!domains.length || !dns_servers.length) return alert('输入不能为空');
+
+            const prog = document.getElementById('progressContainer');
+            const fill = document.getElementById('progressFill');
+            prog.style.display = 'block';
+            fill.style.width = '30%';
 
             try {
                 const response = await fetch('/query_dns', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        domains: domains,
-                        dns_servers: dns_servers
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domains, dns_servers })
                 });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
                 const data = await response.json();
-                const resultDiv = document.getElementById('result');
-                resultDiv.innerHTML = '';
-
-                for (const [domain, domainResults] of Object.entries(data)) {
-                    const domainColumn = document.createElement('div');
-                    domainColumn.classList.add('domain-column');
-
-                    const domainHeading = document.createElement('h2');
-                    domainHeading.textContent = `域名: ${domain}`;
-                    domainColumn.appendChild(domainHeading);
-
-                    for (const [dns_server, serverResults] of Object.entries(domainResults)) {
-                        const dnsHeading = document.createElement('h3');
-                        dnsHeading.textContent = `DNS 服务器: ${dns_server}`;
-                        domainColumn.appendChild(dnsHeading);
-
-                        // 显示 A 记录
-                        const aRecordList = document.createElement('ul');
-                        const aRecordHeading = document.createElement('li');
-                        aRecordHeading.textContent = 'A 记录:';
-                        aRecordList.appendChild(aRecordHeading);
-                        if (Array.isArray(serverResults.A)) {
-                            serverResults.A.forEach(address => {
-                                const listItem = document.createElement('li');
-                                listItem.textContent = address;
-                                aRecordList.appendChild(listItem);
-                            });
-                        } else {
-                            const errorItem = document.createElement('li');
-                            errorItem.textContent = `错误: ${serverResults.A}`;
-                            errorItem.classList.add('error');
-                            aRecordList.appendChild(errorItem);
-                        }
-                        domainColumn.appendChild(aRecordList);
-
-                        // 显示 CNAME 记录
-                        const cnameRecordList = document.createElement('ul');
-                        const cnameRecordHeading = document.createElement('li');
-                        cnameRecordHeading.textContent = 'CNAME 记录:';
-                        cnameRecordList.appendChild(cnameRecordHeading);
-                        if (Array.isArray(serverResults.CNAME)) {
-                            serverResults.CNAME.forEach(cname => {
-                                const listItem = document.createElement('li');
-                                listItem.textContent = cname;
-                                cnameRecordList.appendChild(listItem);
-                            });
-                        } else {
-                            const errorItem = document.createElement('li');
-                            errorItem.textContent = `错误: ${serverResults.CNAME}`;
-                            errorItem.classList.add('error');
-                            cnameRecordList.appendChild(errorItem);
-                        }
-                        domainColumn.appendChild(cnameRecordList);
-                    }
-
-                    resultDiv.appendChild(domainColumn);
-                }
+                fill.style.width = '100%';
+                renderResults(data);
+                loadHistory();
+                setTimeout(() => prog.style.display = 'none', 2000);
             } catch (error) {
-                const resultDiv = document.getElementById('result');
-                resultDiv.innerHTML = `<p class="error">查询失败: ${error.message}</p>`;
+                alert('查询中断');
+                prog.style.display = 'none';
+            }
+        }
+
+        function renderResults(data) {
+            const container = document.getElementById('result');
+            container.innerHTML = '';
+            for (const [domain, results] of Object.entries(data)) {
+                const card = document.createElement('div');
+                card.className = 'result-card glass-card';
+                let html = `<div class="domain-title">${domain}</div>`;
+                for (const [server, records] of Object.entries(results)) {
+                    html += `<div class="detail-server-block"><div class="server-name">${server}</div>`;
+                    if(records.A) {
+                        const ips = Array.isArray(records.A) ? records.A : [records.A];
+                        ips.forEach(ip => {
+                            const isErr = ip.includes('错误') || ip.includes('Error');
+                            html += `<div><span class="record-tag">A</span><span class="record-value" style="color:${isErr?'var(--error-color)':'inherit'}">${ip}</span></div>`;
+                        });
+                    }
+                    if(records.CNAME) {
+                        const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
+                        cnames.forEach(cn => { html += `<div><span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8">CNAME</span><span class="record-value">${cn}</span></div>`; });
+                    }
+                    html += `</div>`;
+                }
+                card.innerHTML = html;
+                container.appendChild(card);
             }
         }
     </script>
