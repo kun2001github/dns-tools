@@ -275,6 +275,16 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(100px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes slideOutRight {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(100px); }
+        }
+
         .history-details.show { display: block; }
 
         .detail-server-block {
@@ -348,6 +358,22 @@
                 <textarea id="dns_servers">202.96.128.166 # 电信DNS
 183.240.8.114 # 联通DNS
 8.8.8.8 # 谷歌DNS</textarea>
+                
+                <!-- 常用DNS服务器推荐 -->
+                <div style="margin-top: 10px; padding: 10px; background: rgba(56, 189, 248, 0.05); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.2);">
+                    <div style="color: var(--accent-color); font-weight: 600; font-size: 0.85rem; margin-bottom: 8px;">💡 常用DNS服务器</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem;">
+                        <button onclick="addDNS('202.96.128.166 # 电信DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">电信DNS</button>
+                        <button onclick="addDNS('183.240.8.114 # 联通DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">联通DNS</button>
+                        <button onclick="addDNS('114.114.114.114 # 114DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">114DNS</button>
+                        <button onclick="addDNS('119.29.29.29 # DNSPod')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">DNSPod</button>
+                        <button onclick="addDNS('223.5.5.5 # 阿里DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">阿里DNS</button>
+                        <button onclick="addDNS('180.76.76.76 # 百度DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">百度DNS</button>
+                        <button onclick="addDNS('8.8.8.8 # 谷歌DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">谷歌DNS</button>
+                        <button onclick="addDNS('1.1.1.1 # Cloudflare')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">Cloudflare</button>
+                    </div>
+                </div>
+                
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
                     <button onclick="saveDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px;">保存配置</button>
                     <button onclick="loadDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px;">加载配置</button>
@@ -357,8 +383,22 @@
             <!-- 中间：目标域名 -->
             <div class="glass-card">
                 <h3><span style="margin-right:8px;">🎯</span> 目标域名</h3>
-                <label>输入需要查询的网站（每行一个或用逗号分隔）:</label>
-                <textarea id="domains" placeholder="example.com&#10;google.com&#10;或: www.baidu.com,google.com,youtube.com"></textarea>
+                <label>输入需要查询的网站（支持空格、逗号、换行分隔，支持URL格式）:</label>
+                <textarea id="domains" placeholder="example.com google.com&#10;https://www.google.com http://github.com/user/repo&#10;或: www.baidu.com,https://example.com?param=value,youtube.com" oninput="updatePreview()"></textarea>
+                
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button onclick="togglePreview()" class="btn btn-outline" style="flex:1; padding: 8px; font-size: 0.9rem;">
+                        <span id="previewIcon" style="margin-right:5px;">👁️</span>
+                        <span id="previewText">隐藏格式化预览</span>
+                    </button>
+                </div>
+                
+                <!-- 格式化结果预览区域 -->
+                <div id="formatPreview" style="margin-top: 15px; padding: 12px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
+                    <div style="color: var(--accent-color); font-weight: 600; margin-bottom: 8px;">格式化预览:</div>
+                    <div id="previewContent" style="font-family: 'JetBrains Mono', monospace; color: var(--text-dim); max-height: 120px; overflow-y: auto; line-height: 1.4;"></div>
+                    <div id="previewStats" style="margin-top: 8px; font-size: 0.8rem; color: var(--text-dim);"></div>
+                </div>
             </div>
 
             <!-- 右边：历史溯源 -->
@@ -390,9 +430,13 @@
     </div>
 
     <script>
+        let previewVisible = true;
+        
         window.onload = function() {
             loadDNSConfig();
             loadHistory();
+            // 初始化预览
+            updatePreview();
         };
 
         // 核心展示逻辑：渲染历史记录
@@ -576,16 +620,169 @@
             showClearConfirm();
         }
 
-        async function queryDNS() {
-            // 优化域名输入：支持换行和逗号分割
+        // 域名格式化函数
+        function normalizeDomain(domain) {
+            if (!domain || !domain.trim()) return '';
+            
+            domain = domain.trim();
+            
+            // 移除协议头
+            domain = domain.replace(/^[a-zA-Z]+:\/\//, '');
+            
+            // 移除端口号
+            domain = domain.replace(/:\d+/, '');
+            
+            // 移除路径部分
+            domain = domain.replace(/\/.*/, '');
+            
+            // 移除查询参数
+            domain = domain.replace(/\?.*/, '');
+            
+            // 移除锚点
+            domain = domain.replace(/#.*/, '');
+            
+            // 移除末尾的斜杠
+            domain = domain.replace(/\/$/, '');
+            
+            // 基本的域名格式验证
+            if (!/^[a-zA-Z0-9.-]+$/.test(domain)) return '';
+            
+            // 移除开头和结尾的无效字符
+            domain = domain.replace(/^[\.-]+|[\.-]+$/g, '');
+            
+            return domain.toLowerCase();
+        }
+
+        // 批量格式化域名
+        function normalizeDomains(domains) {
+            const normalizedDomains = [];
+            const seen = new Set();
+            
+            domains.forEach(domain => {
+                const normalized = normalizeDomain(domain);
+                if (normalized && !seen.has(normalized)) {
+                    seen.add(normalized);
+                    normalizedDomains.push(normalized);
+                }
+            });
+            
+            return normalizedDomains;
+        }
+
+        // 添加DNS服务器
+        function addDNS(dnsServer) {
+            const textarea = document.getElementById('dns_servers');
+            const currentValue = textarea.value.trim();
+            const lines = currentValue ? currentValue.split('\n') : [];
+            
+            // 检查是否已存在
+            if (!lines.some(line => line.trim() === dnsServer)) {
+                lines.push(dnsServer);
+                textarea.value = lines.join('\n');
+                
+                // 显示添加成功的提示
+                showNotification(`✅ 已添加: ${dnsServer.split(' # ')[1] || 'DNS服务器'}`);
+            } else {
+                showNotification(`⚠️ 已存在: ${dnsServer.split(' # ')[1] || 'DNS服务器'}`);
+            }
+        }
+
+        // 显示通知
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: rgba(56, 189, 248, 0.9);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 8px;
+                z-index: 1000;
+                font-size: 0.9rem;
+                animation: slideInRight 0.3s ease-out;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOutRight 0.3s ease-in forwards';
+                setTimeout(() => notification.remove(), 300);
+            }, 2000);
+        }
+
+        // 切换预览显示/隐藏
+        function togglePreview() {
+            previewVisible = !previewVisible;
+            const previewDiv = document.getElementById('formatPreview');
+            const previewIcon = document.getElementById('previewIcon');
+            const previewText = document.getElementById('previewText');
+            
+            if (previewVisible) {
+                previewDiv.style.display = 'block';
+                previewIcon.textContent = '👁️';
+                previewText.textContent = '隐藏格式化预览';
+            } else {
+                previewDiv.style.display = 'none';
+                previewIcon.textContent = '🔍';
+                previewText.textContent = '显示格式化预览';
+            }
+        }
+
+        // 实时更新预览
+        function updatePreview() {
+            if (!previewVisible) return;
+            
             const domainInput = document.getElementById('domains').value.trim();
-            const domains = domainInput
-                .split(/[,\n]/) // 支持逗号和换行分割
-                .map(d => d.trim()) // 去除空格
-                .filter(d => d); // 过滤空值
+            const rawDomains = domainInput
+                .split(/[\s,\n]+/) // 支持空格、逗号、换行分隔
+                .map(d => d.trim())
+                .filter(d => d);
+            
+            if (!rawDomains.length) {
+                document.getElementById('previewContent').innerHTML = '<div style="color: var(--text-dim); font-style: italic;">请输入域名...</div>';
+                document.getElementById('previewStats').innerHTML = '<div>等待输入...</div>';
+                return;
+            }
+            
+            const formattedDomains = normalizeDomains(rawDomains);
+            const previewContent = document.getElementById('previewContent');
+            const previewStats = document.getElementById('previewStats');
+            
+            // 显示格式化结果
+            previewContent.innerHTML = formattedDomains.length > 0 
+                ? formattedDomains.map(d => `<div style="padding: 2px 0;">• ${d}</div>`).join('')
+                : '<div style="color: var(--error-color);">没有有效的域名</div>';
+            
+            // 显示统计信息
+            previewStats.innerHTML = `
+                <div>输入域名: ${rawDomains.length} 个</div>
+                <div>有效域名: ${formattedDomains.length} 个</div>
+                ${rawDomains.length > formattedDomains.length ? 
+                    `<div style="color: var(--error-color);">过滤无效域名: ${rawDomains.length - formattedDomains.length} 个</div>` : 
+                    '<div style="color: var(--success-color);">✓ 所有域名格式正确</div>'
+                }
+            `;
+        }
+
+        async function queryDNS() {
+            // 获取原始输入
+            const domainInput = document.getElementById('domains').value.trim();
+            const rawDomains = domainInput
+                .split(/[\s,\n]+/) // 支持空格、逗号、换行分隔
+                .map(d => d.trim())
+                .filter(d => d);
+            
+            // 格式化域名
+            const domains = normalizeDomains(rawDomains);
+            
+            if (!domains.length) {
+                alert('没有有效的域名可以查询');
+                return;
+            }
             
             const dns_servers = document.getElementById('dns_servers').value.trim().split('\n').filter(s => s);
-            if (!domains.length || !dns_servers.length) return alert('输入不能为空');
+            if (!dns_servers.length) return alert('DNS服务器不能为空');
 
             const prog = document.getElementById('progressContainer');
             const fill = document.getElementById('progressFill');
@@ -612,7 +809,24 @@
         function renderResults(data) {
             const container = document.getElementById('result');
             container.innerHTML = '';
-            for (const [domain, results] of Object.entries(data)) {
+            
+            // 显示格式化信息
+            if (data.formatted_domains) {
+                const infoDiv = document.createElement('div');
+                infoDiv.style.cssText = 'background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 0.9rem;';
+                infoDiv.innerHTML = `
+                    <div style="color: var(--accent-color); font-weight: 600; margin-bottom: 8px;">📊 查询信息</div>
+                    <div style="color: var(--text-dim);">
+                        <div>• 输入域名: ${data.original_domains ? data.original_domains.length : 0} 个</div>
+                        <div>• 有效域名: ${data.formatted_domains.length} 个</div>
+                        ${data.history_id ? `<div>• 记录ID: ${data.history_id}</div>` : ''}
+                    </div>
+                `;
+                container.appendChild(infoDiv);
+            }
+            
+            // 渲染查询结果
+            for (const [domain, results] of Object.entries(data.results || data)) {
                 const card = document.createElement('div');
                 card.className = 'result-card glass-card';
                 let html = `<div class="domain-title">${domain}</div>`;
