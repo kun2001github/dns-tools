@@ -1,7 +1,10 @@
 import dns.resolver
 import json
 import os
+import threading
+import time
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
@@ -74,6 +77,55 @@ def save_dns_history(history):
     except Exception:
         return False
 
+# 全局变量用于跟踪查询进度
+query_progress = {'current': 0, 'total': 0, 'status': 'idle'}
+
+def query_single_dns_server(domain, dns_server_with_label):
+    """
+    查询单个域名单个DNS服务器
+    返回：(dns_server_with_label, server_results)
+    """
+    dns_server, label = parse_dns_server_with_label(dns_server_with_label)
+    
+    if not dns_server:  # 跳过空行
+        return dns_server_with_label, {}
+        
+    resolver = dns.resolver.Resolver()
+    resolver.nameservers = [dns_server]
+    resolver.timeout = 2  # 设置超时时间为2秒
+    resolver.lifetime = 3  # 设置总超时时间为3秒
+    server_results = {}
+
+    # 查询 A 记录
+    try:
+        answers = resolver.resolve(domain, 'A')
+        ip_addresses = [str(answer) for answer in answers]
+        server_results['A'] = ip_addresses
+    except dns.resolver.NXDOMAIN:
+        server_results['A'] = '域名不存在'
+    except dns.resolver.NoAnswer:
+        server_results['A'] = '没有 A 记录'
+    except dns.resolver.Timeout:
+        server_results['A'] = '查询超时'
+    except Exception as e:
+        server_results['A'] = str(e)
+
+    # 查询 CNAME 记录
+    try:
+        answers = resolver.resolve(domain, 'CNAME')
+        cname_records = [str(answer) for answer in answers]
+        server_results['CNAME'] = cname_records
+    except dns.resolver.NXDOMAIN:
+        server_results['CNAME'] = '域名不存在'
+    except dns.resolver.NoAnswer:
+        server_results['CNAME'] = '没有 CNAME 记录'
+    except dns.resolver.Timeout:
+        server_results['CNAME'] = '查询超时'
+    except Exception as e:
+        server_results['CNAME'] = str(e)
+
+    return dns_server_with_label, server_results
+
 def add_dns_history(domains, dns_servers=None, results=None):
     """
     添加DNS查询历史记录（包含详细结果）
@@ -123,60 +175,102 @@ def query_dns():
         domains = data.get('domains', [])
         # 如果前端没有提供DNS服务器，则使用保存的配置或默认值
         dns_servers_with_labels = data.get('dns_servers') or load_dns_config()
+        
+        # 初始化进度跟踪
+        global query_progress
+        query_progress['current'] = 0
+        query_progress['total'] = len(domains) * len([s for s in dns_servers_with_labels if s.strip()])
+        query_progress['status'] = 'running'
+        
         results = {}
-
-        for domain in domains:
-            domain_results = {}
-            for dns_server_with_label in dns_servers_with_labels:
-                # 解析DNS服务器配置，提取IP地址和标签
-                dns_server, label = parse_dns_server_with_label(dns_server_with_label)
+        
+        # 使用线程池进行并行查询
+        max_workers = min(20, len(domains) * len(dns_servers_with_labels))  # 最大20个线程
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for domain in domains:
+                domain_results = {}
+                futures = []
                 
-                if not dns_server:  # 跳过空行
-                    continue
+                # 为每个域名的每个DNS服务器提交查询任务
+                for dns_server_with_label in dns_servers_with_labels:
+                    if dns_server_with_label.strip():  # 跳过空行
+                        future = executor.submit(query_single_dns_server, domain, dns_server_with_label)
+                        futures.append(future)
+                
+                # 等待所有查询完成
+                a_record_comparison = {}  # 用于存储A记录，检测一致性
+                
+                for future in as_completed(futures):
+                    dns_server_with_label, server_results = future.result()
+                    domain_results[dns_server_with_label] = server_results
                     
-                resolver = dns.resolver.Resolver()
-                resolver.nameservers = [dns_server]
-                server_results = {}
+                    # 存储A记录用于一致性比较
+                    if server_results.get('A') and isinstance(server_results['A'], list):
+                        a_record_comparison[dns_server_with_label] = set(server_results['A'])
+                    
+                    # 更新进度
+                    query_progress['current'] += 1
+                
+                # 检测A记录一致性并添加标记
+                if a_record_comparison and len(a_record_comparison) > 1:
+                    # 找出有效的A记录（非错误信息）
+                    valid_a_records = {}
+                    for dns_server, ip_set in a_record_comparison.items():
+                        if isinstance(ip_set, set) and ip_set:
+                            valid_a_records[dns_server] = ip_set
+                    
+                    if len(valid_a_records) > 1:
+                        # 检查是否有多个DNS服务器返回相同的A记录
+                        ip_to_servers = {}
+                        for dns_server, ip_set in valid_a_records.items():
+                            for ip in ip_set:
+                                if ip not in ip_to_servers:
+                                    ip_to_servers[ip] = []
+                                ip_to_servers[ip].append(dns_server)
+                        
+                        # 找出一致的A记录
+                        consistent_ips = {ip: servers for ip, servers in ip_to_servers.items() if len(servers) > 1}
+                        
+                        # 为一致的记录添加标记
+                        for dns_server_with_label, server_results in domain_results.items():
+                            if 'A' in server_results and isinstance(server_results['A'], list):
+                                marked_ips = []
+                                for ip in server_results['A']:
+                                    if ip in consistent_ips:
+                                        marked_ips.append(f"{ip} (一致)")
+                                    else:
+                                        marked_ips.append(ip)
+                                server_results['A'] = marked_ips
 
-                # 查询 A 记录
-                try:
-                    answers = resolver.resolve(domain, 'A')
-                    ip_addresses = [str(answer) for answer in answers]
-                    server_results['A'] = ip_addresses
-                except dns.resolver.NXDOMAIN:
-                    server_results['A'] = '域名不存在'
-                except dns.resolver.NoAnswer:
-                    server_results['A'] = '没有 A 记录'
-                except dns.resolver.Timeout:
-                    server_results['A'] = '查询超时'
-                except Exception as e:
-                    server_results['A'] = str(e)
+                results[domain] = domain_results
 
-                # 查询 CNAME 记录
-                try:
-                    answers = resolver.resolve(domain, 'CNAME')
-                    cname_records = [str(answer) for answer in answers]
-                    server_results['CNAME'] = cname_records
-                except dns.resolver.NXDOMAIN:
-                    server_results['CNAME'] = '域名不存在'
-                except dns.resolver.NoAnswer:
-                    server_results['CNAME'] = '没有 CNAME 记录'
-                except dns.resolver.Timeout:
-                    server_results['CNAME'] = '查询超时'
-                except Exception as e:
-                    server_results['CNAME'] = str(e)
-
-                # 在结果中保存原始配置行（包含标签）
-                domain_results[dns_server_with_label] = server_results
-
-            results[domain] = domain_results
+        query_progress['status'] = 'completed'
 
         # 添加查询历史记录（包含详细结果）
         add_dns_history(domains, dns_servers_with_labels, results)
 
         return jsonify(results)
     except Exception as e:
+        query_progress['status'] = 'error'
         # 捕获外层异常并返回 JSON 格式的错误信息
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_query_progress', methods=['GET'])
+def get_query_progress():
+    """获取查询进度"""
+    try:
+        progress_percentage = 0
+        if query_progress['total'] > 0:
+            progress_percentage = int((query_progress['current'] / query_progress['total']) * 100)
+        
+        return jsonify({
+            "current": query_progress['current'],
+            "total": query_progress['total'],
+            "percentage": progress_percentage,
+            "status": query_progress['status']
+        })
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/get_dns_config', methods=['GET'])

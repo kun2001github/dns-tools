@@ -321,9 +321,47 @@
         }
 
         /* 进度条 */
-        .progress-container { width: 100%; margin: 20px 0; display: none; }
-        .progress-bar { height: 6px; background: #1e293b; border-radius: 10px; overflow: hidden; }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); width: 0%; box-shadow: 0 0 10px var(--accent-color); transition: width 0.3s ease; }
+        .progress-container { 
+            width: 100%; 
+            margin: 20px 0; 
+            display: none; 
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 15px;
+            backdrop-filter: blur(8px);
+        }
+        .progress-bar { 
+            height: 8px; 
+            background: #1e293b; 
+            border-radius: 10px; 
+            overflow: hidden; 
+            margin-bottom: 10px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .progress-fill { 
+            height: 100%; 
+            background: linear-gradient(90deg, #38bdf8, #818cf8); 
+            width: 0%; 
+            box-shadow: 0 0 10px var(--accent-color); 
+            transition: width 0.2s ease; 
+            border-radius: 10px;
+            position: relative;
+        }
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
 
         /* 查询结果 */
         #result { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; width: 100%; }
@@ -550,6 +588,8 @@
         function copyToDomains(text) {
             document.getElementById('domains').value = text.replace(/\\n/g, '\n');
             document.getElementById('domains').focus();
+            // 填入后自动更新格式化预览
+            updatePreview();
         }
 
         async function saveDNSConfig() {
@@ -786,17 +826,51 @@
 
             const prog = document.getElementById('progressContainer');
             const fill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
             prog.style.display = 'block';
-            fill.style.width = '30%';
+            fill.style.width = '0%';
+            progressText.textContent = '准备查询...';
 
             try {
-                const response = await fetch('/query_dns', {
+                // 启动查询
+                const queryPromise = fetch('/query_dns', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ domains, dns_servers })
                 });
+
+                // 启动进度监控
+                const progressInterval = setInterval(async () => {
+                    try {
+                        const progressResponse = await fetch('/get_query_progress');
+                        const progressData = await progressResponse.json();
+                        
+                        if (progressData.percentage) {
+                            fill.style.width = progressData.percentage + '%';
+                            progressText.textContent = `查询进度: ${progressData.percentage}% (${progressData.current}/${progressData.total})`;
+                        }
+                        
+                        if (progressData.status === 'completed') {
+                            clearInterval(progressInterval);
+                            fill.style.width = '100%';
+                            progressText.textContent = '查询完成！';
+                        } else if (progressData.status === 'error') {
+                            clearInterval(progressInterval);
+                            progressText.textContent = '查询出错';
+                        }
+                    } catch (e) {
+                        console.error('获取进度失败:', e);
+                    }
+                }, 100); // 每100ms更新一次进度
+
+                const response = await queryPromise;
                 const data = await response.json();
+                
+                // 停止进度监控
+                clearInterval(progressInterval);
                 fill.style.width = '100%';
+                progressText.textContent = '查询完成！';
+                
                 renderResults(data);
                 loadHistory();
                 setTimeout(() => prog.style.display = 'none', 2000);
@@ -810,41 +884,54 @@
             const container = document.getElementById('result');
             container.innerHTML = '';
             
-            // 显示格式化信息
-            if (data.formatted_domains) {
-                const infoDiv = document.createElement('div');
-                infoDiv.style.cssText = 'background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 0.9rem;';
-                infoDiv.innerHTML = `
-                    <div style="color: var(--accent-color); font-weight: 600; margin-bottom: 8px;">📊 查询信息</div>
-                    <div style="color: var(--text-dim);">
-                        <div>• 输入域名: ${data.original_domains ? data.original_domains.length : 0} 个</div>
-                        <div>• 有效域名: ${data.formatted_domains.length} 个</div>
-                        ${data.history_id ? `<div>• 记录ID: ${data.history_id}</div>` : ''}
-                    </div>
-                `;
-                container.appendChild(infoDiv);
-            }
+            // 获取当前DNS配置的顺序
+            const dnsServers = document.getElementById('dns_servers').value.trim().split('\n').filter(s => s);
             
             // 渲染查询结果
-            for (const [domain, results] of Object.entries(data.results || data)) {
+            const resultsData = data.results || data;
+            
+            for (const [domain, results] of Object.entries(resultsData)) {
                 const card = document.createElement('div');
                 card.className = 'result-card glass-card';
                 let html = `<div class="domain-title">${domain}</div>`;
-                for (const [server, records] of Object.entries(results)) {
-                    html += `<div class="detail-server-block"><div class="server-name">${server}</div>`;
-                    if(records.A) {
-                        const ips = Array.isArray(records.A) ? records.A : [records.A];
-                        ips.forEach(ip => {
-                            const isErr = ip.includes('错误') || ip.includes('Error');
-                            html += `<div><span class="record-tag">A</span><span class="record-value" style="color:${isErr?'var(--error-color)':'inherit'}">${ip}</span></div>`;
-                        });
+                
+                // 按照DNS配置的顺序显示结果
+                dnsServers.forEach(dnsServerConfig => {
+                    if (results[dnsServerConfig]) {
+                        const records = results[dnsServerConfig];
+                        html += `<div class="detail-server-block"><div class="server-name">${dnsServerConfig}</div>`;
+                        
+                        if(records.A) {
+                            const ips = Array.isArray(records.A) ? records.A : [records.A];
+                            ips.forEach(ip => {
+                                // 检查是否包含"一致"标记
+                                const hasConsistencyMark = ip.includes('(一致)');
+                                const isErr = ip.includes('错误') || ip.includes('Error') || ip.includes('不存在') || ip.includes('超时');
+                                
+                                // 设置不同的显示样式
+                                let ipStyle = '';
+                                if (isErr) {
+                                    ipStyle = 'color: var(--error-color);';
+                                } else if (hasConsistencyMark) {
+                                    ipStyle = 'color: var(--success-color); font-weight: 600;';
+                                }
+                                
+                                html += `<div><span class="record-tag">A</span><span class="record-value" style="${ipStyle}">${ip}</span></div>`;
+                            });
+                        }
+                        
+                        if(records.CNAME) {
+                            const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
+                            cnames.forEach(cn => { 
+                                const isErr = cn.includes('错误') || cn.includes('Error') || cn.includes('不存在') || cn.includes('超时');
+                                const cnameStyle = isErr ? 'color: var(--error-color);' : '';
+                                html += `<div><span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8">CNAME</span><span class="record-value" style="${cnameStyle}">${cn}</span></div>`; 
+                            });
+                        }
+                        html += `</div>`;
                     }
-                    if(records.CNAME) {
-                        const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
-                        cnames.forEach(cn => { html += `<div><span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8">CNAME</span><span class="record-value">${cn}</span></div>`; });
-                    }
-                    html += `</div>`;
-                }
+                });
+                
                 card.innerHTML = html;
                 container.appendChild(card);
             }
