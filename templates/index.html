@@ -207,6 +207,11 @@
             from { opacity: 0; transform: translateY(-5px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-5px); }
+        }
 
         /* 清空确认提示样式 */
         .clear-confirm {
@@ -263,11 +268,14 @@
 
         /* 详情区域 */
         .history-details {
-            display: none;
+            max-height: 0;
+            overflow: hidden;
             margin-top: 15px;
             padding-top: 15px;
             border-top: 1px dashed var(--border-color);
             animation: slideIn 0.3s ease-out;
+            overflow-x: auto;
+            transition: max-height 0.3s ease-out;
         }
 
         @keyframes slideIn {
@@ -285,7 +293,10 @@
             to { opacity: 0; transform: translateX(100px); }
         }
 
-        .history-details.show { display: block; }
+        .history-details.show { 
+            max-height: 400px; /* 固定高度，内容可滚动 */
+            overflow-y: auto;
+        }
 
         .detail-server-block {
             background: rgba(255, 255, 255, 0.03);
@@ -318,6 +329,26 @@
             font-size: 0.85rem;
             word-break: break-all;
             color: #e2e8f0;
+        }
+        
+        /* A记录容器悬停效果 */
+        .a-record-container {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+            padding: 4px;
+        }
+        
+        .a-record-container:hover {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        /* 服务器块悬停效果 */
+        .detail-server-block:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(56, 189, 248, 0.2);
         }
 
         /* 进度条 */
@@ -491,20 +522,25 @@
                 const historyItem = document.createElement('div');
                 historyItem.className = 'history-item';
                 
+                // 检查是否有时间节点（去重后的记录）
+                const hasTimeNodes = record.time_nodes && record.time_nodes.length > 0;
+                const recordId = hasTimeNodes ? record.time_nodes[0].id : record.id;
+                
                 // 使用 SVG 作为删除按钮图标
                 historyItem.innerHTML = `
-                    <div class="delete-btn" onclick="deleteHistoryItem('${record.id}')" title="删除记录">
+                    <div class="delete-btn" onclick="deleteHistoryItem('${recordId}')" title="删除记录">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
                     </div>
                     <div class="history-header">
                         <span class="history-time">${record.date} ${record.time}</span>
                         <div class="history-domains" title="${record.domains.join(', ')}">${record.domains.join(', ')}</div>
+                        ${hasTimeNodes ? `<div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">共 ${record.time_nodes.length} 次查询记录</div>` : ''}
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="copyToDomains('${record.domains.join('\\n')}')">填入</button>
-                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="toggleHistoryDetail('${record.id}')">详情</button>
+                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="toggleHistoryDetail('${recordId}')">详情</button>
                     </div>
-                    <div class="history-details" id="detail-${record.id}">
+                    <div class="history-details" id="detail-${recordId}">
                         ${generateHistoryDetailContent(record)}
                     </div>
                 `;
@@ -514,28 +550,230 @@
 
         // 生成详细内容
         function generateHistoryDetailContent(record) {
-            let html = `<div style="font-size:0.8rem; margin-bottom:10px;"><span style="color:var(--text-dim)">查询详情:</span></div>`;
-            if (record.results) {
-                for (const [domain, domainResults] of Object.entries(record.results)) {
-                    html += `<div style="margin-bottom:12px;">
-                        <div style="color:var(--accent-color); font-size:0.85rem; font-weight:600; margin-bottom:5px;">${domain}</div>`;
-                    for (const [dnsServer, serverResults] of Object.entries(domainResults)) {
-                        html += `<div class="detail-server-block">
-                            <div class="server-name">${dnsServer}</div>`;
-                        if (serverResults.A) {
-                            const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
-                            ips.forEach(ip => { html += `<div><span class="record-tag">A</span><span class="record-value">${ip}</span></div>`; });
-                        }
-                        if (serverResults.CNAME) {
-                            const cnames = Array.isArray(serverResults.CNAME) ? serverResults.CNAME : [serverResults.CNAME];
-                            cnames.forEach(cn => { html += `<div><span class="record-tag" style="color:#818cf8; background:rgba(129,140,248,0.1)">CNAME</span><span class="record-value">${cn}</span></div>`; });
+            // 检查是否有时间节点（去重后的记录）
+            if (record.time_nodes && record.time_nodes.length > 0) {
+                // 按时间倒序排列，确保最新查询在第一个
+                const sortedNodes = [...record.time_nodes].sort((a, b) => b.id.localeCompare(a.id));
+                
+                let html = ``;
+                
+                // 显示时间节点选择（垂直排列在左侧）
+                html += `<div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px;">`;
+                sortedNodes.forEach((node, index) => {
+                    const isActive = index === 0 ? 'background: var(--accent-color); color: white; border-color: var(--accent-color);' : '';
+                    html += `<button 
+                        id="node-btn-${node.id}" 
+                        class="btn btn-outline" 
+                        style="padding: 6px 10px; font-size:0.7rem; width: fit-content; white-space: nowrap; border-radius: 6px; transition: all 0.2s ease; ${isActive}" 
+                        onclick="showTimeNodeDetail('${node.id}')">
+                        ${node.date} ${node.time}
+                    </button>`;
+                });
+                html += `</div>`;
+                
+                // 显示详情内容区域（在时间节点下方）
+                html += `<div style="background: rgba(15, 23, 42, 0.4); border-radius: 8px; border: 1px solid var(--border-color); padding: 12px; width: 100%; box-sizing: border-box; overflow: hidden;">`;
+                sortedNodes.forEach((node, index) => {
+                    const displayStyle = index === 0 ? 'block' : 'none';
+                    html += `<div id="node-detail-${node.id}" style="display: ${displayStyle}; width: 100%; max-width: 100%; box-sizing: border-box;">`;
+                    html += generateNodeDetailContent(node);
+                    html += `</div>`;
+                });
+                html += `</div>`;
+                
+                return html;
+            } else {
+                // 旧格式的记录（兼容性）
+                let html = `<div style="margin-bottom:6px; margin-left:4px;">
+                    <span style="color:var(--text-dim); font-size:0.75rem;">查询详情:</span>
+                </div>`;
+                
+                if (record.results) {
+                    // 主大框容器
+                    html += `<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom:8px;">`;
+                    
+                    for (const [domain, domainResults] of Object.entries(record.results)) {
+                        // 域名容器
+                        html += `<div style="margin-bottom:12px;">
+                            <div style="color:var(--accent-color); font-size:0.85rem; font-weight:600; margin-bottom:6px; padding-left:8px; border-left: 3px solid var(--accent-color); background: rgba(56, 189, 248, 0.05); padding: 4px 8px; border-radius: 4px;">🌐 ${domain}</div>`;
+                        
+                        // DNS服务器容器
+                        for (const [dnsServer, serverResults] of Object.entries(domainResults)) {
+                            html += `<div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(56, 189, 248, 0.1); border-radius: 6px; padding: 8px; margin-left: 8px; margin-bottom:6px;">
+                                <div class="server-name" style="font-size:0.75rem; margin-bottom:4px; color: var(--text-dim);">🔍 ${dnsServer}</div>`;
+                            
+                            // 记录容器
+                            if (serverResults.A) {
+                                html += `<div style="margin-bottom:4px;">`;
+                                const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
+                                ips.forEach(ip => { 
+                                    const cleanIp = ip.replace(' (一致)', '');
+                                    html += `<div class="a-record-container" onclick="copyToClipboard('${cleanIp}', event)" title="点击复制IP地址" style="margin-bottom:2px;">
+                                        <span class="record-tag" style="font-size:0.65rem; padding:2px 8px;">A</span>
+                                        <span class="record-value" style="font-size:0.8rem;">${ip}</span>
+                                    </div>`; 
+                                });
+                                html += `</div>`;
+                            }
+                            
+                            if (serverResults.CNAME) {
+                                html += `<div style="margin-bottom:4px;">`;
+                                const cnames = Array.isArray(serverResults.CNAME) ? serverResults.CNAME : [serverResults.CNAME];
+                                cnames.forEach(cn => { 
+                                    html += `<div style="margin-bottom:2px;">
+                                        <span class="record-tag" style="color:#818cf8; background:rgba(129,140,248,0.1); font-size:0.65rem; padding:2px 8px;">CNAME</span>
+                                        <span class="record-value" style="font-size:0.8rem;">${cn}</span>
+                                    </div>`; 
+                                });
+                                html += `</div>`;
+                            }
+                            
+                            html += `</div>`;
                         }
                         html += `</div>`;
                     }
                     html += `</div>`;
                 }
+                return html;
+            }
+        }
+        
+        // 生成单个时间节点的详细内容
+        function generateNodeDetailContent(node) {
+            let html = `<div style="font-size:0.75rem; margin-bottom:8px;">
+                <span style="color:var(--text-dim)">📍 ${node.timestamp}</span>
+            </div>`;
+            
+            if (node.results) {
+                // 主大框容器
+                html += `<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom:8px; width: 100%; box-sizing: border-box; max-width: 100%;">`;
+                
+                for (const [domain, domainResults] of Object.entries(node.results)) {
+                    // 域名容器
+                    html += `<div style="margin-bottom:12px; width: 100%; box-sizing: border-box;">
+                        <div style="color:var(--accent-color); font-size:0.85rem; font-weight:600; margin-bottom:6px; padding-left:8px; border-left: 3px solid var(--accent-color); background: rgba(56, 189, 248, 0.05); padding: 4px 8px; border-radius: 4px; width: 100%; box-sizing: border-box; word-break: break-all;">🌐 ${domain}</div>`;
+                    
+                    // DNS服务器容器
+                    for (const [dnsServer, serverResults] of Object.entries(domainResults)) {
+                        html += `<div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(56, 189, 248, 0.1); border-radius: 6px; padding: 8px; margin-left: 8px; margin-bottom:6px; width: 100%; box-sizing: border-box; max-width: 100%;">
+                            <div class="server-name" style="font-size:0.75rem; margin-bottom:4px; color: var(--text-dim); width: 100%; word-break: break-all;">🔍 ${dnsServer}</div>`;
+                        
+                        // 记录容器
+                        if (serverResults.A) {
+                            html += `<div style="margin-bottom:4px; width: 100%;">`;
+                            const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
+                            ips.forEach(ip => { 
+                                const cleanIp = ip.replace(' (一致)', '');
+                                html += `<div class="a-record-container" onclick="copyToClipboard('${cleanIp}', event)" title="点击复制IP地址" style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
+                                    <span class="record-tag" style="font-size:0.65rem; padding:2px 8px; white-space: nowrap;">A</span>
+                                    <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%;">${ip}</span>
+                                </div>`; 
+                            });
+                            html += `</div>`;
+                        }
+                        
+                        if (serverResults.CNAME) {
+                            html += `<div style="margin-bottom:4px; width: 100%;">`;
+                            const cnames = Array.isArray(serverResults.CNAME) ? serverResults.CNAME : [serverResults.CNAME];
+                            cnames.forEach(cn => { 
+                                html += `<div style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
+                                    <span class="record-tag" style="color:#818cf8; background:rgba(129,140,248,0.1); font-size:0.65rem; padding:2px 8px; white-space: nowrap;">CNAME</span>
+                                    <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%;">${cn}</span>
+                                </div>`; 
+                            });
+                            html += `</div>`;
+                        }
+                        
+                        html += `</div>`;
+                    }
+                    html += `</div>`;
+                }
+                html += `</div>`;
             }
             return html;
+        }
+        
+        // 显示指定时间节点的详情
+        function showTimeNodeDetail(nodeId) {
+            // 隐藏所有节点详情
+            document.querySelectorAll('[id^="node-detail-"]').forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // 重置所有按钮样式
+            document.querySelectorAll('[id^="node-btn-"]').forEach(el => {
+                el.style.background = 'transparent';
+                el.style.color = 'var(--text-main)';
+                el.style.border = '1px solid var(--border-color)';
+            });
+            
+            // 显示选中的节点详情
+            const targetDetail = document.getElementById(`node-detail-${nodeId}`);
+            if (targetDetail) {
+                targetDetail.style.display = 'block';
+            }
+            
+            // 高亮选中的按钮
+            const targetBtn = document.getElementById(`node-btn-${nodeId}`);
+            if (targetBtn) {
+                targetBtn.style.background = 'var(--accent-color)';
+                targetBtn.style.color = 'white';
+                targetBtn.style.border = '1px solid var(--accent-color)';
+            }
+        }
+        
+        // 复制到剪贴板
+        function copyToClipboard(text, event) {
+            navigator.clipboard.writeText(text).then(() => {
+                // 显示复制成功提示，在鼠标位置显示
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position: fixed;
+                    background: var(--success-color);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    z-index: 1000;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                    animation: fadeIn 0.3s ease-out;
+                    white-space: nowrap;
+                    pointer-events: none;
+                `;
+                notification.textContent = `✅ 已复制: ${text}`;
+                document.body.appendChild(notification);
+                
+                // 获取鼠标位置
+                const mouseX = event ? event.clientX : window.innerWidth / 2;
+                const mouseY = event ? event.clientY : window.innerHeight / 2;
+                
+                // 设置提示框位置，确保不超出屏幕边界
+                const rect = notification.getBoundingClientRect();
+                let left = mouseX + 15;
+                let top = mouseY - rect.height - 10;
+                
+                // 防止超出右边界
+                if (left + rect.width > window.innerWidth - 10) {
+                    left = mouseX - rect.width - 15;
+                }
+                
+                // 防止超出顶部边界
+                if (top < 10) {
+                    top = mouseY + 15;
+                }
+                
+                notification.style.left = left + 'px';
+                notification.style.top = top + 'px';
+                
+                setTimeout(() => {
+                    notification.style.animation = 'fadeOut 0.3s ease-out';
+                    setTimeout(() => notification.remove(), 300);
+                }, 1500);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动复制');
+            });
         }
 
         function toggleHistoryDetail(id) {
@@ -908,15 +1146,25 @@
                                 const hasConsistencyMark = ip.includes('(一致)');
                                 const isErr = ip.includes('错误') || ip.includes('Error') || ip.includes('不存在') || ip.includes('超时');
                                 
+                                // 提取干净的IP地址用于复制
+                                const cleanIp = ip.replace(' (一致)', '');
+                                
                                 // 设置不同的显示样式
                                 let ipStyle = '';
                                 if (isErr) {
-                                    ipStyle = 'color: var(--error-color);';
+                                    ipStyle = 'color: var(--error-color); cursor: default;';
                                 } else if (hasConsistencyMark) {
                                     ipStyle = 'color: var(--success-color); font-weight: 600;';
                                 }
                                 
-                                html += `<div><span class="record-tag">A</span><span class="record-value" style="${ipStyle}">${ip}</span></div>`;
+                                // 错误信息不添加点击复制功能
+                                const onClickAttr = isErr ? '' : `onclick="copyToClipboard('${cleanIp}', event)" title="点击复制IP地址"`;
+                                const containerClass = isErr ? '' : 'a-record-container';
+                                
+                                html += `<div class="${containerClass}" ${onClickAttr} style="display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 4px;">
+                                    <span class="record-tag">A</span>
+                                    <span class="record-value" style="${ipStyle}">${ip}</span>
+                                </div>`;
                             });
                         }
                         

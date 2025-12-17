@@ -129,12 +129,13 @@ def query_single_dns_server(domain, dns_server_with_label):
 def add_dns_history(domains, dns_servers=None, results=None):
     """
     添加DNS查询历史记录（包含详细结果）
-    domains: 查询的域名列表
-    dns_servers: 使用的DNS服务器列表
-    results: 查询结果详情
+    相同域名的查询会合并，保留最新的查询时间戳
     """
     try:
         history = load_dns_history()
+        
+        # 创建域名集合键，用于去重
+        domains_key = ','.join(sorted(domains))
         
         # 创建新的历史记录
         new_record = {
@@ -147,15 +148,58 @@ def add_dns_history(domains, dns_servers=None, results=None):
             'time': datetime.now().strftime('%H:%M:%S')
         }
         
-        # 将新记录添加到历史记录开头
-        history.insert(0, new_record)
+        # 检查是否已存在相同域名的记录
+        existing_index = None
+        for i, record in enumerate(history):
+            existing_domains_key = ','.join(sorted(record.get('domains', [])))
+            if existing_domains_key == domains_key:
+                existing_index = i
+                break
         
-        # 限制历史记录数量，最多保留30条（包含详细结果，减少存储量）
+        if existing_index is not None:
+            # 如果存在相同域名的记录，在原有记录的基础上添加时间节点
+            existing_record = history[existing_index]
+            
+            # 如果没有时间节点列表，创建一个
+            if 'time_nodes' not in existing_record:
+                # 将原有记录转为时间节点
+                existing_record['time_nodes'] = [{
+                    'id': existing_record['id'],
+                    'results': existing_record.get('results', {}),
+                    'timestamp': existing_record['timestamp'],
+                    'date': existing_record['date'],
+                    'time': existing_record['time']
+                }]
+                # 清理原有字段
+                del existing_record['results']
+                del existing_record['id']
+            
+            # 添加新的时间节点
+            existing_record['time_nodes'].insert(0, {
+                'id': new_record['id'],
+                'results': new_record.get('results', {}),
+                'timestamp': new_record['timestamp'],
+                'date': new_record['date'],
+                'time': new_record['time']
+            })
+            
+            # 更新时间戳为最新的
+            existing_record['timestamp'] = new_record['timestamp']
+            existing_record['date'] = new_record['date']
+            existing_record['time'] = new_record['time']
+            
+            # 将记录移到最前面
+            history.insert(0, history.pop(existing_index))
+        else:
+            # 新记录，直接添加到开头
+            history.insert(0, new_record)
+        
+        # 限制历史记录数量，最多保留30条
         if len(history) > 30:
             history = history[:30]
         
         save_dns_history(history)
-        return new_record
+        return history[0]
     except Exception:
         return None
 
