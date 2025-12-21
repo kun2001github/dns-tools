@@ -87,15 +87,21 @@ docker run -p 8000:8000 dns-tool
 
 ```
 dns-tools/
-├── app.py              # 主应用文件
-├── requirements.txt     # Python依赖包
-├── dns_config.json     # DNS服务器配置（自动生成）
-├── dns_history.json     # 查询历史记录（自动生成）
-├── Dockerfile          # Docker构建文件
+├── app.py                # 主应用文件
+├── requirements.txt       # Python依赖包
+├── config.json           # DNS服务器配置（自动生成）
+├── history/
+│   └── dns_history.json   # 查询历史记录（自动生成）
+├── utils/
+│   ├── storage.py
+│   ├── history_service.py
+│   └── query_service.py
+├── Dockerfile            # Docker构建文件
 ├── templates/
-│   └── index.html      # 前端界面
-└── README.md           # 项目说明文档
+│   └── index.html        # 前端界面
+└── README.md             # 项目说明文档
 ```
+
 
 ## 技术栈
 
@@ -108,12 +114,14 @@ dns-tools/
 ## API接口
 
 - `GET /` - 主页面
-- `GET /get_dns_config` - 获取DNS服务器配置
-- `POST /add_dns_server` - 添加DNS服务器
-- `DELETE /delete_dns_server` - 删除DNS服务器
 - `POST /query_dns` - 执行DNS查询
+- `GET /get_query_progress` - 获取当前查询进度
+- `GET /get_dns_config` - 获取DNS服务器配置
+- `POST /save_dns_config` - 保存DNS服务器配置
 - `GET /get_dns_history` - 获取查询历史
-- `DELETE /delete_dns_history` - 删除历史记录
+- `POST /clear_dns_history` - 清空查询历史
+- `POST /delete_dns_history` - 删除指定历史记录
+
 
 ## 注意事项
 
