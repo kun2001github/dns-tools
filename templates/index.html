@@ -335,18 +335,30 @@
         /* A记录容器悬停效果 */
         .a-record-container {
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
             border-radius: 4px;
             padding: 4px;
+            border: 1px solid transparent;
+            box-sizing: border-box;
         }
         
         .a-record-container:hover {
-            background: rgba(56, 189, 248, 0.1);
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            transform: translateY(-1px);
+            background: none;
+            border-color: transparent;
+            transform: none;
+            box-shadow: none;
         }
+
+        .a-record-highlight {
+            background: rgba(56, 189, 248, 0.16) !important;
+            border-color: rgba(56, 189, 248, 0.35) !important;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.12);
+        }
+
+
         
         /* 服务器块悬停效果 */
+
         .detail-server-block:hover {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(56, 189, 248, 0.2);
@@ -800,9 +812,39 @@
             return { text: cleaned, style: '', copyable: true, copy: cleaned };
         }
 
+        function bindARecordHoverHighlight(root) {
+            const scope = root || document;
+            const items = scope.querySelectorAll('[data-a-ip]');
+            if (!items.length) return;
+
+            const listByIp = new Map();
+            items.forEach(el => {
+                const ip = el.getAttribute('data-a-ip');
+                if (!ip) return;
+                if (!listByIp.has(ip)) listByIp.set(ip, []);
+                listByIp.get(ip).push(el);
+            });
+
+            const clearAll = () => {
+                listByIp.forEach(group => group.forEach(node => node.classList.remove('a-record-highlight')));
+            };
+
+            items.forEach(el => {
+                const ip = el.getAttribute('data-a-ip');
+                if (!ip) return;
+                el.addEventListener('mouseenter', () => {
+                    clearAll();
+                    const group = listByIp.get(ip);
+                    if (group) group.forEach(node => node.classList.add('a-record-highlight'));
+                });
+                el.addEventListener('mouseleave', clearAll);
+            });
+        }
+
 
 
         // 核心展示逻辑：渲染历史记录
+
 
         function displayHistory(history) {
             const historyList = document.getElementById('historyList');
@@ -841,9 +883,12 @@
                 `;
                 historyList.appendChild(historyItem);
             });
+
+            bindARecordHoverHighlight(historyList);
         }
 
         // 生成详细内容
+
         function generateHistoryDetailContent(record) {
             // 检查是否有时间节点（去重后的记录）
             if (record.time_nodes && record.time_nodes.length > 0) {
@@ -903,11 +948,12 @@
                                 const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
                                 ips.forEach(ip => { 
                                     const displayIp = cleanARecordValue(ip);
-                                    html += `<div class="a-record-container" onclick="copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px;">
+                                    html += `<div class="a-record-container" data-a-ip="${displayIp}" onclick="copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px;">
                                         <span class="record-tag" style="font-size:0.65rem; padding:2px 8px;">A</span>
                                         <span class="record-value" style="font-size:0.8rem;">${displayIp}</span>
                                     </div>`; 
                                 });
+
 
                                 html += `</div>`;
                             }
@@ -960,11 +1006,12 @@
                             const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
                             ips.forEach(ip => { 
                                 const displayIp = cleanARecordValue(ip);
-                                html += `<div class="a-record-container" onclick="copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
+                                html += `<div class="a-record-container" data-a-ip="${displayIp}" onclick="copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
                                     <span class="record-tag" style="font-size:0.65rem; padding:2px 8px; white-space: nowrap;">A</span>
                                     <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%;">${displayIp}</span>
                                 </div>`; 
                             });
+
 
                             html += `</div>`;
                         }
@@ -1472,13 +1519,15 @@
                                     const display = formatARecordDisplay(ip, consistency);
                                     const onClickAttr = display.copyable ? `onclick="copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
                                     const containerClass = display.copyable ? 'a-record-container' : '';
+                                    const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
 
-                                    dnsContent += `<div class="${containerClass}" ${onClickAttr} style="margin-bottom: 4px;">
+                                    dnsContent += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="margin-bottom: 4px;">
                                         <span class="record-tag" style="font-size:0.6rem; padding:1px 6px;">A</span>
                                         <span style="${display.style}">${display.text}</span>
                                     </div>`;
                                 });
                             }
+
 
 
                             if (records.CNAME) {
@@ -1533,13 +1582,15 @@
 
                                     const onClickAttr = display.copyable ? `onclick="copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
                                     const containerClass = display.copyable ? 'a-record-container' : '';
+                                    const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
 
-                                    html += `<div class="${containerClass}" ${onClickAttr} style="display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 4px;">
+                                    html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 4px;">
                                         <span class="record-tag">A</span>
                                         <span class="record-value" style="${display.style}">${display.text}</span>
                                     </div>`;
                                 });
                             }
+
 
                             
                             if(records.CNAME) {
@@ -1558,9 +1609,12 @@
                     container.appendChild(card);
                 }
             }
+
+            bindARecordHoverHighlight(container);
         }
 
         // 切换视图模式
+
         function toggleViewMode() {
             const resultContainer = document.getElementById('result');
             const currentResult = resultContainer.getAttribute('data-last-result');
