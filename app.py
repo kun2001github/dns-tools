@@ -276,16 +276,12 @@ def query_dns():
                         # 找出一致的A记录
                         consistent_ips = {ip: servers for ip, servers in ip_to_servers.items() if len(servers) > 1}
                         
-                        # 为一致的记录添加标记
+                        # 前端按“跨 DNS 一致的 A 记录”进行颜色标记，这里不再拼接“(一致)”文本
+                        # 保持A记录原样返回
                         for dns_server_with_label, server_results in domain_results.items():
                             if 'A' in server_results and isinstance(server_results['A'], list):
-                                marked_ips = []
-                                for ip in server_results['A']:
-                                    if ip in consistent_ips:
-                                        marked_ips.append(f"{ip} (一致)")
-                                    else:
-                                        marked_ips.append(ip)
-                                server_results['A'] = marked_ips
+                                server_results['A'] = [ip for ip in server_results['A']]
+
 
                 results[domain] = domain_results
 

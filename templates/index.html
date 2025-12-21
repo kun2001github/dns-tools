@@ -128,10 +128,11 @@
             font-size: 1.5rem;
             padding: 16px 80px;
             border-radius: 50px;
-            margin: 40px auto;
-            display: block;
+            margin: 0;
+            display: inline-flex;
             letter-spacing: 4px;
         }
+
 
         /* 历史记录面板与条目 */
         .history-panel {
@@ -395,10 +396,133 @@
         }
 
         /* 查询结果 */
-        #result { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; width: 100%; }
-        .result-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; }
+        #result { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; width: 100%; transition: all 0.3s ease; }
+        .result-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; transition: all 0.3s ease; }
         .domain-title { font-size: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px; color: white; display: flex; align-items: center; gap: 10px; }
         .domain-title::before { content: ''; width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; box-shadow: 0 0 8px var(--success-color); }
+
+        /* 横排视图模式 */
+        #result.horizontal-view { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            width: 100%; 
+        }
+
+        #result.horizontal-view .result-card {
+            padding: 15px 20px;
+        }
+
+        .horizontal-domain-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 15px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .horizontal-dns-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: stretch;
+            width: 100%;
+        }
+
+        .horizontal-dns-grid .horizontal-domain-cell.dns-result {
+            flex: 1 1 220px;
+            min-width: 160px;
+        }
+
+
+        @media (max-width: 640px) {
+            .horizontal-dns-grid .horizontal-domain-cell.dns-result {
+                min-width: 100%;
+            }
+        }
+
+
+
+
+        .horizontal-domain-row:hover {
+            border-color: rgba(56, 189, 248, 0.4);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .horizontal-domain-cell {
+            padding: 10px 12px;
+            border-radius: 10px;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            transition: all 0.2s ease;
+        }
+
+
+        .horizontal-domain-cell:hover {
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }
+
+        .horizontal-domain-cell.domain {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            font-weight: 600;
+            color: var(--accent-color);
+            font-size: 0.95rem;
+            width: 98%;
+            max-width: 100%;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+
+
+
+        .horizontal-domain-cell.dns-result {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border-color);
+            height: 100%;
+        }
+
+
+        .horizontal-dns-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .horizontal-dns-content {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+
+        /* 视图切换按钮状态 */
+        #viewToggleBtn.active {
+            background: var(--accent-color);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        }
+
+        /* 返回顶部按钮显示状态 */
+        #backToTopBtn.show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        #backToTopBtn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+        }
 
         .footer-info { margin-top: 50px; padding: 20px; color: var(--text-dim); font-size: 0.8rem; letter-spacing: 2px; }
 
@@ -489,26 +613,197 @@
             <div id="progressText" style="text-align:center; font-size:0.8rem; color:var(--accent-color); margin-top:8px;">Ready</div>
         </div>
 
-        <button onclick="queryDNS()" class="btn btn-primary query-main-btn">RUN QUERY</button>
+        <div style="display: flex; flex-direction: column; gap: 12px; justify-content: flex-start; align-items: flex-start; margin: 30px 0; width: 100%;">
+            <div style="position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 68px;">
+                <button onclick="toggleViewMode()" id="viewToggleBtn" class="btn btn-outline" style="font-size: 1.2rem; padding: 16px 40px; border-radius: 50px; letter-spacing: 2px; border: 2px solid var(--accent-color); color: var(--accent-color); transition: all 0.3s ease;">
+                    <span id="viewToggleIcon">📇</span>
+                    <span id="viewToggleText">视图切换</span>
+                </button>
+
+
+                <button onclick="queryDNS()" class="btn btn-primary query-main-btn" style="position: absolute; left: 50%; transform: translateX(-50%);">RUN QUERY</button>
+            </div>
+
+            <div id="verticalViewHint" style="display: block; text-align: left; color: var(--text-dim); font-size: 0.85rem; line-height: 1.4; max-width: 980px;">
+                提示：当解析域名 A 记录在多个 DNS 解析中，将显示相同的颜色。
+            </div>
+        </div>
+
+
+
+
 
         <div id="result"></div>
 
         <div class="footer-info">
             StandardSoftware IT TOOLBOX &copy; 2025 // DNS BATCH ANALYZER V2.0
         </div>
+
+        <!-- 返回顶部按钮 -->
+        <button id="backToTopBtn" onclick="scrollToTop()" class="btn" style="position: fixed; bottom: 30px; right: 30px; width: 50px; height: 50px; border-radius: 50%; background: var(--accent-color); color: white; border: none; font-size: 1.5rem; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4); z-index: 1000; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; opacity: 0; transform: translateY(20px); pointer-events: none;">
+            ↑
+        </button>
+
+
     </div>
 
     <script>
         let previewVisible = true;
+        let isHorizontalView = true;
+
         
         window.onload = function() {
             loadDNSConfig();
             loadHistory();
             // 初始化预览
             updatePreview();
+
+            // 默认横排：同步按钮状态
+            syncViewToggleUI();
+
+            // 返回顶部按钮：仅滚动后可见
+            window.addEventListener('scroll', handleScroll);
+            handleScroll();
         };
 
+        function colorFromIp(ip) {
+            const s = String(ip || '');
+            let hash = 0;
+            for (let i = 0; i < s.length; i++) {
+                hash = ((hash * 31) + s.charCodeAt(i)) >>> 0;
+            }
+            const hue = hash % 360;
+            // 深色背景上更清晰的高饱和颜色
+            return `hsl(${hue}, 85%, 62%)`;
+        }
+
+
+        function syncViewToggleUI() {
+            const viewToggleBtn = document.getElementById('viewToggleBtn');
+            const viewToggleText = document.getElementById('viewToggleText');
+            const viewToggleIcon = document.getElementById('viewToggleIcon');
+            if (!viewToggleBtn || !viewToggleText || !viewToggleIcon) return;
+
+            viewToggleText.textContent = '视图切换';
+            viewToggleIcon.textContent = isHorizontalView ? '📇' : '📇';
+            // 不再切换 active 纯色样式，保持按钮原样
+        }
+
+
+
+
+        function handleScroll() {
+            const backToTopBtn = document.getElementById('backToTopBtn');
+            if (!backToTopBtn) return;
+
+            // 当顶部“定义区域”（三栏配置区）看不到时才显示
+            const topSection = document.querySelector('.three-column-container');
+            let shouldShow = window.pageYOffset > 120;
+            if (topSection) {
+                const rect = topSection.getBoundingClientRect();
+                shouldShow = rect.bottom < 0;
+            }
+
+            if (shouldShow) {
+                backToTopBtn.classList.add('show');
+            } else {
+                backToTopBtn.classList.remove('show');
+            }
+        }
+
+
+        function cleanARecordValue(value) {
+            return String(value || '').replace(/\s*\(一致\)\s*/g, '').trim();
+        }
+
+        function isLikelyIPv4(value) {
+            return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value);
+        }
+
+        function isARecordNonCopyable(value) {
+            const s = String(value || '');
+            return (
+                s.includes('错误') ||
+                s.includes('Error') ||
+                s.includes('不存在') ||
+                s.includes('超时') ||
+                s.includes('没有 A 记录') ||
+                s.includes('没有A记录') ||
+                s.includes('NoAnswer') ||
+                s.includes('NXDOMAIN')
+            );
+        }
+
+        // 仅当同一 IP 在多个 DNS 里出现时才上色；否则默认白色
+        function buildAConsistency(domainResults, dnsServers) {
+            const serversByIp = new Map();
+            const orderedIps = [];
+
+            dnsServers.forEach(server => {
+                const records = domainResults[server];
+                if (!records || !records.A) return;
+                const ips = Array.isArray(records.A) ? records.A : [records.A];
+
+                ips.forEach(raw => {
+                    const rawStr = String(raw || '');
+                    if (isARecordNonCopyable(rawStr)) return;
+
+                    const ip = cleanARecordValue(rawStr);
+                    if (!isLikelyIPv4(ip)) return;
+
+                    if (!serversByIp.has(ip)) {
+                        serversByIp.set(ip, new Set());
+                        orderedIps.push(ip);
+                    }
+                    serversByIp.get(ip).add(server);
+                });
+            });
+
+            const colorByIp = new Map();
+            const serverCountByIp = new Map();
+
+            orderedIps.forEach(ip => {
+                const set = serversByIp.get(ip);
+                const count = set ? set.size : 1;
+                serverCountByIp.set(ip, count);
+                if (count >= 2) {
+                    colorByIp.set(ip, colorFromIp(ip));
+                }
+            });
+
+            return { colorByIp, serverCountByIp };
+        }
+
+        function formatARecordDisplay(rawValue, consistency) {
+            const rawStr = String(rawValue || '');
+
+            // 错误/状态文案：不提供复制
+            if (isARecordNonCopyable(rawStr)) {
+                return { text: cleanARecordValue(rawStr), style: 'color: var(--error-color);', copyable: false, copy: '' };
+            }
+
+            const cleaned = cleanARecordValue(rawStr);
+
+            // 非 IP：当作普通文案显示（不复制）
+            if (!isLikelyIPv4(cleaned)) {
+                return { text: cleaned, style: 'color: var(--text-dim);', copyable: false, copy: '' };
+            }
+
+            const count = consistency && consistency.serverCountByIp ? (consistency.serverCountByIp.get(cleaned) || 1) : 1;
+            const color = (count >= 2 && consistency && consistency.colorByIp) ? consistency.colorByIp.get(cleaned) : null;
+
+            if (color) {
+                return { text: cleaned, style: `color: ${color}; font-weight: 800;`, copyable: true, copy: cleaned };
+            }
+
+            // 没有“多 DNS 一致出现”时，默认白色
+            return { text: cleaned, style: '', copyable: true, copy: cleaned };
+        }
+
+
+
         // 核心展示逻辑：渲染历史记录
+
         function displayHistory(history) {
             const historyList = document.getElementById('historyList');
             historyList.innerHTML = '';
@@ -607,12 +902,13 @@
                                 html += `<div style="margin-bottom:4px;">`;
                                 const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
                                 ips.forEach(ip => { 
-                                    const cleanIp = ip.replace(' (一致)', '');
-                                    html += `<div class="a-record-container" onclick="copyToClipboard('${cleanIp}', event)" title="点击复制IP地址" style="margin-bottom:2px;">
+                                    const displayIp = cleanARecordValue(ip);
+                                    html += `<div class="a-record-container" onclick="copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px;">
                                         <span class="record-tag" style="font-size:0.65rem; padding:2px 8px;">A</span>
-                                        <span class="record-value" style="font-size:0.8rem;">${ip}</span>
+                                        <span class="record-value" style="font-size:0.8rem;">${displayIp}</span>
                                     </div>`; 
                                 });
+
                                 html += `</div>`;
                             }
                             
@@ -663,12 +959,13 @@
                             html += `<div style="margin-bottom:4px; width: 100%;">`;
                             const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
                             ips.forEach(ip => { 
-                                const cleanIp = ip.replace(' (一致)', '');
-                                html += `<div class="a-record-container" onclick="copyToClipboard('${cleanIp}', event)" title="点击复制IP地址" style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
+                                const displayIp = cleanARecordValue(ip);
+                                html += `<div class="a-record-container" onclick="copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
                                     <span class="record-tag" style="font-size:0.65rem; padding:2px 8px; white-space: nowrap;">A</span>
-                                    <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%;">${ip}</span>
+                                    <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%;">${displayIp}</span>
                                 </div>`; 
                             });
+
                             html += `</div>`;
                         }
                         
@@ -828,6 +1125,13 @@
             document.getElementById('domains').focus();
             // 填入后自动更新格式化预览
             updatePreview();
+            
+            // 如果用户复制了历史记录的域名，可以提示他们进行查询以查看横排视图
+            setTimeout(() => {
+                if (isHorizontalView && document.getElementById('result').children.length === 0) {
+                    showNotification('请点击RUN QUERY进行查询，以查看横排视图效果');
+                }
+            }, 1000);
         }
 
         async function saveDNSConfig() {
@@ -1109,6 +1413,8 @@
                 fill.style.width = '100%';
                 progressText.textContent = '查询完成！';
                 
+                // 保存查询结果数据以便视图切换使用
+                document.getElementById('result').setAttribute('data-last-result', JSON.stringify(data));
                 renderResults(data);
                 loadHistory();
                 setTimeout(() => prog.style.display = 'none', 2000);
@@ -1128,62 +1434,164 @@
             // 渲染查询结果
             const resultsData = data.results || data;
             
-            for (const [domain, results] of Object.entries(resultsData)) {
-                const card = document.createElement('div');
-                card.className = 'result-card glass-card';
-                let html = `<div class="domain-title">${domain}</div>`;
+            if (isHorizontalView) {
+                // 横排视图模式
+                container.classList.add('horizontal-view');
                 
-                // 按照DNS配置的顺序显示结果
-                dnsServers.forEach(dnsServerConfig => {
-                    if (results[dnsServerConfig]) {
-                        const records = results[dnsServerConfig];
-                        html += `<div class="detail-server-block"><div class="server-name">${dnsServerConfig}</div>`;
-                        
-                        if(records.A) {
-                            const ips = Array.isArray(records.A) ? records.A : [records.A];
-                            ips.forEach(ip => {
-                                // 检查是否包含"一致"标记
-                                const hasConsistencyMark = ip.includes('(一致)');
-                                const isErr = ip.includes('错误') || ip.includes('Error') || ip.includes('不存在') || ip.includes('超时');
-                                
-                                // 提取干净的IP地址用于复制
-                                const cleanIp = ip.replace(' (一致)', '');
-                                
-                                // 设置不同的显示样式
-                                let ipStyle = '';
-                                if (isErr) {
-                                    ipStyle = 'color: var(--error-color); cursor: default;';
-                                } else if (hasConsistencyMark) {
-                                    ipStyle = 'color: var(--success-color); font-weight: 600;';
-                                }
-                                
-                                // 错误信息不添加点击复制功能
-                                const onClickAttr = isErr ? '' : `onclick="copyToClipboard('${cleanIp}', event)" title="点击复制IP地址"`;
-                                const containerClass = isErr ? '' : 'a-record-container';
-                                
-                                html += `<div class="${containerClass}" ${onClickAttr} style="display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 4px;">
-                                    <span class="record-tag">A</span>
-                                    <span class="record-value" style="${ipStyle}">${ip}</span>
-                                </div>`;
-                            });
+                for (const [domain, results] of Object.entries(resultsData)) {
+                    const row = document.createElement('div');
+                    row.className = 'horizontal-domain-row';
+                    
+                    // 第一行：域名
+                    const domainCell = document.createElement('div');
+                    domainCell.className = 'horizontal-domain-cell domain';
+                    domainCell.textContent = domain;
+                    row.appendChild(domainCell);
+
+                    // 第二行：各DNS解析内容横排
+                    const dnsGrid = document.createElement('div');
+                    dnsGrid.className = 'horizontal-dns-grid';
+
+                    const consistency = buildAConsistency(results, dnsServers);
+
+                    dnsServers.forEach(dnsServerConfig => {
+
+                        const dnsCell = document.createElement('div');
+                        dnsCell.className = 'horizontal-domain-cell dns-result';
+
+                        let contentHtml = '';
+
+                        if (results[dnsServerConfig]) {
+                            const records = results[dnsServerConfig];
+                            contentHtml += `<div class="horizontal-dns-label">${dnsServerConfig}</div>`;
+                            let dnsContent = '<div class="horizontal-dns-content">';
+
+                            if (records.A) {
+                                const ips = Array.isArray(records.A) ? records.A : [records.A];
+                                ips.forEach(ip => {
+                                    const display = formatARecordDisplay(ip, consistency);
+                                    const onClickAttr = display.copyable ? `onclick="copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                                    const containerClass = display.copyable ? 'a-record-container' : '';
+
+                                    dnsContent += `<div class="${containerClass}" ${onClickAttr} style="margin-bottom: 4px;">
+                                        <span class="record-tag" style="font-size:0.6rem; padding:1px 6px;">A</span>
+                                        <span style="${display.style}">${display.text}</span>
+                                    </div>`;
+                                });
+                            }
+
+
+                            if (records.CNAME) {
+                                const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
+                                cnames.forEach(cn => {
+                                    const isErr = cn.includes('错误') || cn.includes('Error') || cn.includes('不存在') || cn.includes('超时');
+                                    const cnameStyle = isErr ? 'color: var(--error-color);' : '';
+                                    dnsContent += `<div style="margin-bottom: 4px;">
+                                        <span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8; font-size:0.6rem; padding:1px 6px;">CNAME</span>
+                                        <span style="${cnameStyle}">${cn}</span>
+                                    </div>`;
+                                });
+                            }
+
+                            dnsContent += '</div>';
+                            contentHtml += dnsContent;
+                        } else {
+                            contentHtml += `<div class="horizontal-dns-label">${dnsServerConfig}</div>
+                            <div class="horizontal-dns-content" style="color: var(--text-dim);">未查询</div>`;
                         }
-                        
-                        if(records.CNAME) {
-                            const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
-                            cnames.forEach(cn => { 
-                                const isErr = cn.includes('错误') || cn.includes('Error') || cn.includes('不存在') || cn.includes('超时');
-                                const cnameStyle = isErr ? 'color: var(--error-color);' : '';
-                                html += `<div><span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8">CNAME</span><span class="record-value" style="${cnameStyle}">${cn}</span></div>`; 
-                            });
-                        }
-                        html += `</div>`;
-                    }
-                });
+
+                        dnsCell.innerHTML = contentHtml;
+                        dnsGrid.appendChild(dnsCell);
+                    });
+
+                    row.appendChild(dnsGrid);
+                    container.appendChild(row);
+                }
+
+            } else {
+                // 原始的卡片视图模式
+                container.classList.remove('horizontal-view');
                 
-                card.innerHTML = html;
-                container.appendChild(card);
+                for (const [domain, results] of Object.entries(resultsData)) {
+                    const card = document.createElement('div');
+                    card.className = 'result-card glass-card';
+                    let html = `<div class="domain-title">${domain}</div>`;
+
+                    const consistency = buildAConsistency(results, dnsServers);
+                    
+                    // 按照DNS配置的顺序显示结果
+                    dnsServers.forEach(dnsServerConfig => {
+
+                        if (results[dnsServerConfig]) {
+                            const records = results[dnsServerConfig];
+                            html += `<div class="detail-server-block"><div class="server-name">${dnsServerConfig}</div>`;
+                            
+                            if(records.A) {
+                                const ips = Array.isArray(records.A) ? records.A : [records.A];
+                                ips.forEach(ip => {
+                                    const display = formatARecordDisplay(ip, consistency);
+
+                                    const onClickAttr = display.copyable ? `onclick="copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                                    const containerClass = display.copyable ? 'a-record-container' : '';
+
+                                    html += `<div class="${containerClass}" ${onClickAttr} style="display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 4px;">
+                                        <span class="record-tag">A</span>
+                                        <span class="record-value" style="${display.style}">${display.text}</span>
+                                    </div>`;
+                                });
+                            }
+
+                            
+                            if(records.CNAME) {
+                                const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
+                                cnames.forEach(cn => { 
+                                    const isErr = cn.includes('错误') || cn.includes('Error') || cn.includes('不存在') || cn.includes('超时');
+                                    const cnameStyle = isErr ? 'color: var(--error-color);' : '';
+                                    html += `<div><span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8">CNAME</span><span class="record-value" style="${cnameStyle}">${cn}</span></div>`; 
+                                });
+                            }
+                            html += `</div>`;
+                        }
+                    });
+                    
+                    card.innerHTML = html;
+                    container.appendChild(card);
+                }
             }
         }
+
+        // 切换视图模式
+        function toggleViewMode() {
+            const resultContainer = document.getElementById('result');
+            const currentResult = resultContainer.getAttribute('data-last-result');
+            
+            // 如果没有任何结果数据，提示用户
+            if (!currentResult && resultContainer.children.length === 0) {
+                showNotification('请先进行DNS查询，然后再切换视图模式');
+                return;
+            }
+            
+            // 切换视图状态（默认横排；点击进入竖排）
+            isHorizontalView = !isHorizontalView;
+            syncViewToggleUI();
+            showNotification(isHorizontalView ? '已切换到横排视图模式' : '已切换到竖排视图模式');
+            
+            // 重新渲染当前结果
+            if (currentResult) {
+                renderResults(JSON.parse(currentResult));
+            }
+        }
+
+
+        // 滚动到顶部
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+
     </script>
 </body>
 
