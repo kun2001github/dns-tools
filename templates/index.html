@@ -45,7 +45,43 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        h3 { color: var(--accent-color); font-weight: 600; margin-top: 0; }
+                h3 { color: var(--accent-color); font-weight: 600; margin-top: 0; }
+
+        .main-title {
+            font-size: 2.8rem;
+            font-weight: 800;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #93c5fd, #38bdf8, #93c5fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer-text 5s infinite;
+            background-size: 200% auto;
+            letter-spacing: 2px;
+            text-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+        }
+
+        .subtitle {
+            color: var(--text-dim);
+            font-size: 1rem;
+            letter-spacing: 1px;
+            animation: fadeIn 1s ease-out 0.2s backwards;
+        }
+
+        @keyframes shimmer-text {
+            0% { background-position: 200% center; }
+            100% { background-position: 0% center; }
+        }
+
+        @keyframes pulse-button {
+            0% { box-shadow: 0 0 25px rgba(56, 189, 248, 0.4); }
+            50% { box-shadow: 0 0 40px rgba(56, 189, 248, 0.8); }
+            100% { box-shadow: 0 0 25px rgba(56, 189, 248, 0.4); }
+        }
+
+        @keyframes result-appear {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
         /* 布局卡片 */
         .three-column-container {
@@ -62,17 +98,19 @@
             border-radius: 16px;
             padding: 24px;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-            transition: border-color 0.3s ease;
+            transition: all 0.3s ease;
         }
 
         .glass-card:hover {
             border-color: rgba(56, 189, 248, 0.4);
+            transform: translateY(-4px);
+            box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.4), 0 0 10px rgba(56, 189, 248, 0.2);
         }
 
         textarea {
             width: 100%;
-            height: 180px;
-            background: rgba(15, 23, 42, 0.8);
+            height: 140px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.8));
             border: 1px solid var(--border-color);
             border-radius: 8px;
             color: var(--accent-color);
@@ -87,7 +125,8 @@
 
         textarea:focus {
             border-color: var(--accent-color);
-            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.4), inset 0 0 10px rgba(15, 23, 42, 0.5);
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.7), rgba(30, 41, 59, 0.9));
         }
 
         /* 按钮系统 */
@@ -109,8 +148,9 @@
         }
 
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+            transform: translateY(-3px) scale(1.03);
+            box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+            animation: none; /* Stop pulsing on hover */
         }
 
         .btn-outline {
@@ -131,12 +171,17 @@
             margin: 0;
             display: inline-flex;
             letter-spacing: 4px;
+            animation: pulse-button 2.5s infinite;
         }
 
+        .result-item-appear {
+            opacity: 0;
+            animation: result-appear 0.5s ease-out forwards;
+        }
 
         /* 历史记录面板与条目 */
         .history-panel {
-            max-height: 500px;
+            max-height: 410px;
             overflow-y: auto;
             padding-right: 5px;
         }
@@ -236,10 +281,14 @@
             background: #c82333;
         }
 
-        .delete-btn svg {
+        .btn-icon {
             width: 14px;
             height: 14px;
+            stroke: currentColor;
             stroke-width: 2.5;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
         .history-header {
@@ -272,11 +321,11 @@
             max-height: 0;
             overflow: hidden;
             margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px dashed var(--border-color);
-            animation: slideIn 0.3s ease-out;
+            padding-top: 0;
+            border-top: 1px dashed transparent;
+            transition: max-height 0.4s ease-out, padding-top 0.4s ease-out, border-color 0.4s ease-out, opacity 0.3s ease-out;
+            opacity: 0;
             overflow-x: auto;
-            transition: max-height 0.3s ease-out;
         }
 
         @keyframes slideIn {
@@ -295,8 +344,11 @@
         }
 
         .history-details.show { 
-            max-height: 400px; /* 固定高度，内容可滚动 */
+            max-height: 280px;
             overflow-y: auto;
+            opacity: 1;
+            padding-top: 15px;
+            border-color: var(--border-color);
         }
 
         .detail-server-block {
@@ -549,6 +601,7 @@
 </head>
 
 <body>
+    <canvas id="constellation-canvas" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1;"></canvas>
     <div class="main-container">
         <div style="text-align: center; margin-bottom: 40px;">
             <h1 style="font-size: 2.5rem; margin-bottom: 10px; background: linear-gradient(to right, #fff, #38bdf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">DNS ANALYST PRO</h1>
@@ -601,7 +654,7 @@
                 <!-- 格式化结果预览区域 -->
                 <div id="formatPreview" style="margin-top: 15px; padding: 12px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem;">
                     <div style="color: var(--accent-color); font-weight: 600; margin-bottom: 8px;">格式化预览:</div>
-                    <div id="previewContent" style="font-family: 'JetBrains Mono', monospace; color: var(--text-dim); max-height: 120px; overflow-y: auto; line-height: 1.4;"></div>
+                    <div id="previewContent" style="font-family: 'JetBrains Mono', monospace; color: var(--text-dim); max-height: 50px; overflow-y: auto; line-height: 1.4;"></div>
                     <div id="previewStats" style="margin-top: 8px; font-size: 0.8rem; color: var(--text-dim);"></div>
                 </div>
             </div>
@@ -874,8 +927,14 @@
                         ${hasTimeNodes ? `<div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">共 ${record.time_nodes.length} 次查询记录</div>` : ''}
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="copyToDomains('${record.domains.join('\\n')}')">填入</button>
-                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="toggleHistoryDetail('${recordId}')">详情</button>
+                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="copyToDomains('${record.domains.join('\\n')}')">
+                            <svg class="btn-icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            <span>填入</span>
+                        </button>
+                        <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px;" onclick="toggleHistoryDetail('${recordId}')">
+                            <svg class="btn-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <span>详情</span>
+                        </button>
                     </div>
                     <div class="history-details" id="detail-${recordId}">
                         ${generateHistoryDetailContent(record)}
