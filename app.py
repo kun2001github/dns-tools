@@ -1,4 +1,6 @@
 """Flask 应用入口：提供 DNS 查询、进度、配置与历史记录接口。"""
+import signal
+import sys
 from flask import Flask, request, jsonify, render_template
 
 from utils.history_service import add_dns_history
@@ -34,6 +36,9 @@ def query_dns_route():
         add_dns_history(domains, dns_servers_with_labels, results)
 
         return jsonify(results)
+    except SystemExit:
+        mark_error()
+        return jsonify({"error": "查询已中断"}), 200
     except Exception as e:
         mark_error()
         return jsonify({"error": str(e)}), 500
@@ -119,5 +124,12 @@ def delete_dns_history_route():
         return jsonify({"error": str(e)}), 500
 
 
+# 优雅处理Gunicorn的SIGTERM信号
+def handle_sigterm(signum, frame):
+    sys.exit(0)
+
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    signal.signal(signal.SIGTERM, handle_sigterm)
+    signal.signal(signal.SIGINT, handle_sigterm)
+    app.run(debug=True, port=8000)

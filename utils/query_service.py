@@ -1,8 +1,55 @@
 """查询服务：并发查询多个域名/DNS，并跟踪进度。"""
 import dns.resolver
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import os
+import signal
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
-query_progress = {'current': 0, 'total': 0, 'status': 'idle'}
+PROGRESS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'query_progress.json')
+
+
+def _get_progress():
+    """从文件读取进度信息。"""
+    try:
+        if os.path.exists(PROGRESS_FILE):
+            with open(PROGRESS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {'current': 0, 'total': 0, 'status': 'idle'}
+
+
+def _save_progress(progress):
+    """保存进度信息到文件。"""
+    try:
+        with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(progress, f)
+    except Exception:
+        pass
+
+
+def _reset_progress(total):
+    progress = {'current': 0, 'total': total, 'status': 'running' if total else 'idle'}
+    _save_progress(progress)
+
+
+def _increment_progress():
+    progress = _get_progress()
+    progress['current'] += 1
+    _save_progress(progress)
+
+
+def _mark_completed():
+    progress = _get_progress()
+    progress['status'] = 'completed'
+    _save_progress(progress)
+
+
+def _mark_error():
+    progress = _get_progress()
+    progress['status'] = 'error'
+    _save_progress(progress)
 
 
 def parse_dns_server_with_label(dns_line):
@@ -15,29 +62,13 @@ def parse_dns_server_with_label(dns_line):
     return dns_line.strip(), ''
 
 
-def _reset_progress(total):
-    query_progress['current'] = 0
-    query_progress['total'] = total
-    query_progress['status'] = 'running' if total else 'idle'
-
-
-def _increment_progress():
-    query_progress['current'] += 1
-
-
-def _mark_completed():
-    query_progress['status'] = 'completed'
-
-
-def _mark_error():
-    query_progress['status'] = 'error'
-
-
 def get_query_progress():
+    """获取查询进度（从文件读取）。"""
+    progress = _get_progress()
     percentage = 0
-    total = query_progress.get('total', 0)
-    current = query_progress.get('current', 0)
-    status = query_progress.get('status', 'idle')
+    total = progress.get('total', 0)
+    current = progress.get('current', 0)
+    status = progress.get('status', 'idle')
     if total > 0:
         percentage = int((current / total) * 100)
     return {
@@ -105,50 +136,70 @@ def query_domains(domains, dns_servers_with_labels):
 
     max_workers = min(20, total_tasks)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for domain in domains:
-            domain_results = {}
-            futures = []
+    # 检查是否收到中断信号
+    def check_interrupt():
+        if hasattr(os, 'kill'):
+            try:
+                os.kill(os.getpid(), 0)
+            except:
+                return True
+        return False
 
-            for dns_server_with_label in valid_servers:
-                future = executor.submit(query_single_dns_server, domain, dns_server_with_label)
-                futures.append(future)
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for domain in domains:
+                domain_results = {}
+                futures = []
 
-            a_record_comparison = {}
-            for future in as_completed(futures):
-                dns_server_with_label, server_results = future.result()
-                domain_results[dns_server_with_label] = server_results
+                for dns_server_with_label in valid_servers:
+                    future = executor.submit(query_single_dns_server, domain, dns_server_with_label)
+                    futures.append(future)
 
-                if server_results.get('A') and isinstance(server_results['A'], list):
-                    a_record_comparison[dns_server_with_label] = set(server_results['A'])
+                a_record_comparison = {}
+                for future in as_completed(futures, timeout=120):
+                    try:
+                        dns_server_with_label, server_results = future.result()
+                        domain_results[dns_server_with_label] = server_results
 
-                _increment_progress()
+                        if server_results.get('A') and isinstance(server_results['A'], list):
+                            a_record_comparison[dns_server_with_label] = set(server_results['A'])
 
-            if a_record_comparison and len(a_record_comparison) > 1:
-                valid_a_records = {
-                    dns_server: ip_set
-                    for dns_server, ip_set in a_record_comparison.items()
-                    if isinstance(ip_set, set) and ip_set
-                }
-                if len(valid_a_records) > 1:
-                    ip_to_servers = {}
-                    for dns_server, ip_set in valid_a_records.items():
-                        for ip in ip_set:
-                            ip_to_servers.setdefault(ip, []).append(dns_server)
+                        _increment_progress()
+                    except TimeoutError:
+                        _increment_progress()
+                        continue
+                    except Exception:
+                        _increment_progress()
+                        continue
 
-                    consistent_ips = {
-                        ip: servers for ip, servers in ip_to_servers.items() if len(servers) > 1
+                if a_record_comparison and len(a_record_comparison) > 1:
+                    valid_a_records = {
+                        dns_server: ip_set
+                        for dns_server, ip_set in a_record_comparison.items()
+                        if isinstance(ip_set, set) and ip_set
                     }
-                    if consistent_ips:
-                        for server_key, server_results in domain_results.items():
-                            if 'A' in server_results and isinstance(server_results['A'], list):
-                                server_results['A'] = sorted(server_results['A'])
+                    if len(valid_a_records) > 1:
+                        ip_to_servers = {}
+                        for dns_server, ip_set in valid_a_records.items():
+                            for ip in ip_set:
+                                ip_to_servers.setdefault(ip, []).append(dns_server)
+
+                        consistent_ips = {
+                            ip: servers for ip, servers in ip_to_servers.items() if len(servers) > 1
+                        }
+                        if consistent_ips:
+                            for server_key, server_results in domain_results.items():
+                                if 'A' in server_results and isinstance(server_results['A'], list):
+                                    server_results['A'] = sorted(server_results['A'])
 
 
-            results[domain] = domain_results
+                results[domain] = domain_results
 
-    _mark_completed()
-    return results
+        _mark_completed()
+        return results
+    except (KeyboardInterrupt, SystemExit, TimeoutError):
+        _mark_completed()
+        raise
 
 
 def mark_error():

@@ -40,12 +40,18 @@ python app.py
 pip install -r requirements.txt
 
 # 使用 gunicorn 启动（推荐）
-gunicorn -w 4 -b 0.0.0.0:8000 app:app
+# 方式1：使用配置文件启动（推荐）
+gunicorn -c gunicorn_config.py app:app
+
+# 方式2：直接指定参数启动
+gunicorn -w 4 -b 0.0.0.0:8000 --timeout 120 --graceful-timeout 30 app:app
 ```
 
 **gunicorn 参数说明：**
 - `-w 4`：指定工作进程数量，可根据服务器CPU核心数调整
 - `-b 0.0.0.0:8000`：绑定到所有网络接口，监听8000端口
+- `--timeout 120`：设置请求超时时间为120秒（避免DNS查询超时）
+- `--graceful-timeout 30`：设置优雅关闭超时时间为30秒
 - `app:app`：指定Flask应用文件名（app.py）和应用实例名（app）
 
 ### Docker 部署
@@ -89,7 +95,9 @@ docker run -p 8000:8000 dns-tool
 dns-tools/
 ├── app.py                # 主应用文件
 ├── requirements.txt       # Python依赖包
+├── gunicorn_config.py    # Gunicorn配置文件
 ├── config.json           # DNS服务器配置（自动生成）
+├── query_progress.json   # 查询进度文件（自动生成）
 ├── history/
 │   └── dns_history.json   # 查询历史记录（自动生成）
 ├── utils/
