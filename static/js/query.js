@@ -121,11 +121,21 @@ async function queryDNS() {
         });
 
         // 保存查询统计信息
+        const now = new Date();
+        const timestamp = now.getFullYear() + '-' + 
+            String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+            String(now.getDate()).padStart(2, '0') + ' ' + 
+            String(now.getHours()).padStart(2, '0') + ':' + 
+            String(now.getMinutes()).padStart(2, '0') + ':' + 
+            String(now.getSeconds()).padStart(2, '0');
+        
         document.getElementById('result').setAttribute('data-last-result', JSON.stringify(orderedResults));
         document.getElementById('result').setAttribute('data-domain-order', JSON.stringify(domains));
         document.getElementById('result').setAttribute('data-query-stats', JSON.stringify({
             domainCount: domains.length,
-            duration: duration
+            dnsServerCount: dns_servers.length,
+            duration: duration,
+            timestamp: timestamp
         }));
         
         window.DisplayManager.renderResults(orderedResults, domains);

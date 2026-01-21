@@ -122,48 +122,88 @@ function bindARecordHoverHighlight(root) {
  * 使用唯一ID防止重复创建，确保切换视图时保持稳定
  */
 function renderStatsBar(container, queryStats) {
-    const existingStatsBar = container.querySelector('#stats-bar');
-    if (existingStatsBar) {
-        // 统计信息已存在且数据未变化，跳过创建以避免闪烁
-        return;
+    let statsBar = container.querySelector('#stats-bar');
+    
+    // 统计内容HTML结构 - 使用SVG美化
+    const statsContentHtml = `
+        <div class="stats-info-group">
+            <div class="stats-item">
+                <svg class="stats-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+                <div class="stats-text">
+                    <span class="stats-label">查询域名数量</span>
+                    <span class="stats-value">${queryStats.domainCount}个</span>
+                </div>
+            </div>
+            <div class="stats-divider"></div>
+            <div class="stats-item">
+                <svg class="stats-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                    <path d="M2 17l10 5 10-5"></path>
+                    <path d="M2 12l10 5 10-5"></path>
+                </svg>
+                <div class="stats-text">
+                    <span class="stats-label">DNS服务器数量</span>
+                    <span class="stats-value">${queryStats.dnsServerCount || 0}个</span>
+                </div>
+            </div>
+            <div class="stats-divider"></div>
+            <div class="stats-item">
+                <svg class="stats-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <div class="stats-text">
+                    <span class="stats-label">本次查询耗时</span>
+                    <span class="stats-value">${queryStats.duration}秒</span>
+                </div>
+            </div>
+            <div class="stats-divider"></div>
+            <div class="stats-item">
+                <svg class="stats-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <div class="stats-text">
+                    <span class="stats-label">查询时间</span>
+                    <span class="stats-value">${queryStats.timestamp || '-'}</span>
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-outline stats-action-btn" id="clearCacheBtn">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"></path>
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                <path d="M10 11v6"></path>
+                <path d="M14 11v6"></path>
+            </svg>
+            <span>清理DNS缓存</span>
+        </button>
+    `;
+
+    if (!statsBar) {
+        statsBar = document.createElement('div');
+        statsBar.id = 'stats-bar';
+        statsBar.className = 'stats-bar glass-card';
+        
+        // 插入到容器最前面
+        container.insertBefore(statsBar, container.firstChild);
     }
 
-    const statsBar = document.createElement('div');
-    statsBar.id = 'stats-bar';
-    statsBar.style.cssText = `
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 16px;
-        margin-bottom: 16px;
-        background: rgba(56, 189, 248, 0.1);
-        border: 1px solid rgba(56, 189, 248, 0.3);
-        border-radius: 8px;
-        font-size: 0.85rem;
-    `;
+    // 更新内容（即使已存在也更新，修复旧数据残留bug）
+    statsBar.innerHTML = statsContentHtml;
 
-    const statsInfo = document.createElement('div');
-    statsInfo.style.cssText = 'color: var(--accent-color); font-weight: 600;';
-    statsInfo.innerHTML = `📊 共查询域名 <span style="font-size: 1rem; margin: 0 4px;">${queryStats.domainCount}</span> 个 | 本次查询耗时 <span style="font-size: 1rem; margin: 0 4px;">${queryStats.duration}</span> 秒`;
-
-    const clearCacheBtn = document.createElement('button');
-    clearCacheBtn.className = 'btn btn-outline';
-    clearCacheBtn.style.cssText = 'padding: 6px 12px; font-size: 0.8rem; white-space: nowrap;';
-    clearCacheBtn.innerHTML = `
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; margin-right: 4px; transition: all 0.3s ease;">
-            <path d="M3 6h18"></path>
-            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-            <path d="M10 11v6"></path>
-            <path d="M14 11v6"></path>
-        </svg>
-        <span>清理DNS缓存</span>
-    `;
-    clearCacheBtn.onclick = clearDNSCache;
-
-    statsBar.appendChild(statsInfo);
-    statsBar.appendChild(clearCacheBtn);
-    container.appendChild(statsBar);
+    // 重新绑定事件（因为innerHTML重置了DOM）
+    const btn = statsBar.querySelector('#clearCacheBtn');
+    if (btn) {
+        btn.onclick = window.QueryManager ? window.QueryManager.clearDNSCache : window.clearDNSCache;
+    }
 }
 
 /**
