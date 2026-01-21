@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Pro 批量查询工具</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../static/css/styles.css" onerror="(function(){var l=document.createElement('link');l.rel='stylesheet';l.href='/static/css/styles.css';l.onerror=function(){var l2=document.createElement('link');l2.rel='stylesheet';l2.href='{{ url_for('static', filename='css/styles.css') }}';document.head.appendChild(l2);};document.head.appendChild(l);})();">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 
 </head>
 
@@ -46,8 +46,22 @@
                 </div>
                 
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button onclick="saveDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px;">保存配置</button>
-                    <button onclick="loadDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px;">加载配置</button>
+                    <button onclick="saveDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; transition: all 0.3s ease;">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        <span>保存配置</span>
+                    </button>
+                    <button onclick="loadDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; transition: all 0.3s ease;">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        <span>加载配置</span>
+                    </button>
                 </div>
             </div>
 
@@ -58,8 +72,11 @@
                 <textarea id="domains" placeholder="example.com google.com&#10;https://www.google.com http://github.com/user/repo&#10;或: www.baidu.com,https://example.com?param=value,youtube.com" oninput="updatePreview()"></textarea>
                 
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button onclick="togglePreview()" class="btn btn-outline" style="flex:1; padding: 8px; font-size: 0.9rem;">
-                        <span id="previewIcon" style="margin-right:5px;">👁️</span>
+                    <button onclick="togglePreview()" class="btn btn-outline" style="flex:1; padding: 8px; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <svg id="previewIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; transition: all 0.3s ease;">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
                         <span id="previewText">隐藏格式化预览</span>
                     </button>
                 </div>
@@ -93,8 +110,13 @@
 
         <div style="display: flex; flex-direction: column; gap: 12px; justify-content: flex-start; align-items: flex-start; margin: 30px 0; width: 100%;">
             <div style="position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 68px;">
-                <button onclick="toggleViewMode()" id="viewToggleBtn" class="btn btn-outline" style="font-size: 1.2rem; padding: 16px 40px; border-radius: 50px; letter-spacing: 2px; border: 2px solid var(--accent-color); color: var(--accent-color); transition: all 0.3s ease;">
-                    <span id="viewToggleIcon">📇</span>
+                <button onclick="toggleViewMode()" id="viewToggleBtn" class="btn btn-outline" style="font-size: 1.2rem; padding: 16px 40px; border-radius: 50px; letter-spacing: 2px; border: 2px solid var(--accent-color); color: var(--accent-color); transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;">
+                    <svg id="viewToggleIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 22px; height: 22px; transition: all 0.3s ease;">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
                     <span id="viewToggleText">视图切换</span>
                 </button>
 
@@ -109,7 +131,7 @@
         <div id="result"></div>
 
         <div class="footer-info">
-            StandardSoftware IT TOOLBOX &copy; 2025 // DNS BATCH ANALYZER V2.0
+            StandardSoftware IT TOOLBOX &copy; 2026 // DNS BATCH ANALYZER V2.2
         </div>
 
         <!-- 返回顶部按钮 -->
@@ -118,7 +140,15 @@
         </button>
     </div>
 
-    <script src="../static/js/main.js" onerror="(function(f){var s=document.createElement('script');s.src='/static/js/main.js';s.onerror=function(){var s2=document.createElement('script');s2.src=f;document.body.appendChild(s2);};document.body.appendChild(s);}('{{ url_for('static', filename='js/main.js') }}'));"></script>
+    <!-- JavaScript模块 - 按依赖顺序加载 -->
+    <script src="{{ url_for('static', filename='js/config.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/format.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/display.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/history.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/query.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 
 </html>

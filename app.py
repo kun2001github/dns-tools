@@ -124,6 +124,72 @@ def delete_dns_history_route():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/clear_dns_cache', methods=['POST'])
+def clear_dns_cache_route():
+    """清理DNS缓存。"""
+    try:
+        import subprocess
+        import platform
+        
+        system = platform.system()
+        success = False
+        message = ""
+        
+        if system == "Darwin":  # macOS
+            try:
+                subprocess.run(['sudo', 'dscacheutil', '-flushcache'], check=True, timeout=5)
+                subprocess.run(['sudo', 'killall', '-HUP', 'mDNSResponder'], check=True, timeout=5)
+                success = True
+                message = "macOS DNS缓存已清理"
+            except subprocess.CalledProcessError:
+                message = "需要sudo权限清理macOS DNS缓存，请在终端执行：sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder"
+            except subprocess.TimeoutExpired:
+                message = "清理DNS缓存超时"
+        elif system == "Linux":
+            try:
+                # 尝试清理systemd-resolved缓存
+                result = subprocess.run(['systemd-resolve', '--flush-caches'], 
+                                      capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    success = True
+                    message = "Linux DNS缓存已清理 (systemd-resolved)"
+                else:
+                    # 尝试nscd
+                    result = subprocess.run(['nscd', '-i', 'hosts'], 
+                                          capture_output=True, timeout=5)
+                    if result.returncode == 0:
+                        success = True
+                        message = "Linux DNS缓存已清理 (nscd)"
+                    else:
+                        message = "请在终端执行：sudo systemd-resolve --flush-caches 或 sudo nscd -i hosts"
+            except FileNotFoundError:
+                message = "未找到DNS缓存服务，请手动清理：sudo systemd-resolve --flush-caches"
+            except subprocess.TimeoutExpired:
+                message = "清理DNS缓存超时"
+        elif system == "Windows":
+            try:
+                subprocess.run(['ipconfig', '/flushdns'], check=True, timeout=5)
+                success = True
+                message = "Windows DNS缓存已清理"
+            except subprocess.CalledProcessError:
+                message = "需要管理员权限清理Windows DNS缓存，请以管理员身份运行"
+            except subprocess.TimeoutExpired:
+                message = "清理DNS缓存超时"
+        else:
+            message = f"不支持的操作系统: {system}"
+        
+        return jsonify({
+            "success": success,
+            "message": message,
+            "system": system
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"清理DNS缓存失败: {str(e)}"
+        }), 500
+
+
 # 优雅处理Gunicorn的SIGTERM信号
 def handle_sigterm(signum, frame):
     sys.exit(0)

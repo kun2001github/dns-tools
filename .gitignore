@@ -1,2 +1,4 @@
 __pycache__
 *.pyc
+*.md
+test_cross_platform.py

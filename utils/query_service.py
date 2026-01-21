@@ -134,43 +134,70 @@ def query_domains(domains, dns_servers_with_labels):
         _mark_completed()
         return results
 
-    max_workers = min(20, total_tasks)
-
-    # 检查是否收到中断信号
-    def check_interrupt():
-        if hasattr(os, 'kill'):
-            try:
-                os.kill(os.getpid(), 0)
-            except:
-                return True
-        return False
+    # 限制并发线程数，避免内存溢出
+    # 根据任务数量动态调整，但最多不超过10个
+    max_workers = min(10, max(5, len(domains)))
 
     try:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for domain in domains:
-                domain_results = {}
-                futures = []
+            # 一次性提交所有任务，简化逻辑
+            futures = []
+            future_to_domain_server = {}
 
+            # 提交所有查询任务
+            for domain in domains:
                 for dns_server_with_label in valid_servers:
                     future = executor.submit(query_single_dns_server, domain, dns_server_with_label)
                     futures.append(future)
+                    future_to_domain_server[future] = (domain, dns_server_with_label)
 
-                a_record_comparison = {}
-                for future in as_completed(futures, timeout=120):
+            # 处理所有完成的任务
+            try:
+                for completed_future in as_completed(futures, timeout=60):
                     try:
-                        dns_server_with_label, server_results = future.result()
-                        domain_results[dns_server_with_label] = server_results
+                        dns_server_with_label, server_results = completed_future.result()
+                        domain, _ = future_to_domain_server[completed_future]
 
-                        if server_results.get('A') and isinstance(server_results['A'], list):
-                            a_record_comparison[dns_server_with_label] = set(server_results['A'])
+                        if domain not in results:
+                            results[domain] = {}
 
+                        results[domain][dns_server_with_label] = server_results
                         _increment_progress()
-                    except TimeoutError:
-                        _increment_progress()
-                        continue
-                    except Exception:
-                        _increment_progress()
-                        continue
+                    except Exception as e:
+                        # 记录单个任务的错误
+                        try:
+                            domain, dns_server_with_label = future_to_domain_server[completed_future]
+                            if domain not in results:
+                                results[domain] = {}
+                            error_msg = f'查询错误: {str(e)}'
+                            results[domain][dns_server_with_label] = {'A': error_msg, 'CNAME': error_msg}
+                            _increment_progress()
+                        except KeyError:
+                            # future不在映射表中，跳过
+                            pass
+            except TimeoutError:
+                # as_completed超时，处理所有未完成的future
+                for future in futures:
+                    if not future.done():
+                        # 取消未完成的任务
+                        future.cancel()
+                        # 记录超时结果
+                        if future in future_to_domain_server:
+                            domain, dns_server_with_label = future_to_domain_server[future]
+                            if domain not in results:
+                                results[domain] = {}
+                            results[domain][dns_server_with_label] = {'A': '查询超时', 'CNAME': '查询超时'}
+                            _increment_progress()
+
+        # 对每个域名的A记录进行排序和一致性检查
+        for domain in domains:
+            if domain in results:
+                domain_results = results[domain]
+                a_record_comparison = {}
+
+                for dns_server_with_label, server_results in domain_results.items():
+                    if server_results.get('A') and isinstance(server_results['A'], list):
+                        a_record_comparison[dns_server_with_label] = set(server_results['A'])
 
                 if a_record_comparison and len(a_record_comparison) > 1:
                     valid_a_records = {
@@ -192,12 +219,9 @@ def query_domains(domains, dns_servers_with_labels):
                                 if 'A' in server_results and isinstance(server_results['A'], list):
                                     server_results['A'] = sorted(server_results['A'])
 
-
-                results[domain] = domain_results
-
         _mark_completed()
         return results
-    except (KeyboardInterrupt, SystemExit, TimeoutError):
+    except (KeyboardInterrupt, SystemExit):
         _mark_completed()
         raise
 

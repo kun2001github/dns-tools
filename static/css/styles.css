@@ -158,6 +158,17 @@ textarea:focus {
     border-color: var(--text-dim);
 }
 
+.btn-outline:hover .btn-icon,
+.btn-outline:hover svg {
+    transform: scale(1.15);
+    stroke: var(--accent-color);
+}
+
+.btn-outline .btn-icon,
+.btn-outline svg {
+    transition: all 0.3s ease;
+}
+
 .query-main-btn {
     font-size: 1.5rem;
     padding: 16px 80px;
