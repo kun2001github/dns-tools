@@ -548,20 +548,20 @@ textarea:focus {
     transition: all 0.2s ease;
 }
 
-.horizontal-domain-cell:hover {
-    background: rgba(56, 189, 248, 0.05);
-    border: 1px solid rgba(56, 189, 248, 0.2);
-}
-
 .horizontal-domain-cell.domain:hover {
     background: transparent;
     border-bottom: 1px solid var(--border-color);
-    box-shadow: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
 }
+
+
 
 .horizontal-domain-cell.domain {
     background: transparent;
     border-bottom: 1px solid var(--border-color);
+    border-radius: 0;
     box-shadow: none;
     font-weight: 600;
     color: white;
@@ -784,3 +784,103 @@ textarea:focus {
 ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
 @media (max-width: 1024px) { .three-column-container { grid-template-columns: 1fr; } }
+
+/* 时间轴样式 */
+.timeline-container {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.timeline-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.timeline-title {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.timeline-count {
+    font-size: 0.75rem;
+    background: var(--accent-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.timeline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+.timeline-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.timeline-item::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--border-color);
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.timeline-item:hover {
+    border-color: var(--accent-color);
+    background: rgba(56, 189, 248, 0.05);
+}
+
+.timeline-item:hover::before {
+    background: var(--accent-color);
+    box-shadow: 0 0 8px var(--accent-color);
+}
+
+.timeline-item.active {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: var(--accent-color);
+}
+
+.timeline-item.active::before {
+    background: var(--accent-color);
+    box-shadow: 0 0 12px var(--accent-color);
+}
+
+.timeline-time {
+    flex: 1;
+    font-size: 0.8rem;
+    color: var(--text-main);
+}
+
+.timeline-duration {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+
+
+
+

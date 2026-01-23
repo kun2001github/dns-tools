@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 PROGRESS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'query_progress.json')
@@ -123,7 +124,14 @@ def query_single_dns_server(domain, dns_server_with_label):
 
 
 def query_domains(domains, dns_servers_with_labels):
-    """并行查询多个域名和DNS服务器，返回结果字典。"""
+    """并行查询多个域名和DNS服务器，返回结果字典及查询耗时。
+    
+    Returns:
+        tuple: (results, duration_seconds) - 查询结果字典和查询耗时（秒）
+    """
+    # 记录开始时间
+    start_time = time.time()
+    
     valid_servers = [s for s in dns_servers_with_labels if s.strip()]
     total_tasks = len(domains) * len(valid_servers)
     _reset_progress(total_tasks)
@@ -132,7 +140,8 @@ def query_domains(domains, dns_servers_with_labels):
 
     if total_tasks == 0:
         _mark_completed()
-        return results
+        duration = time.time() - start_time
+        return results, duration
 
     # 限制并发线程数，避免内存溢出
     # 根据任务数量动态调整，但最多不超过10个
@@ -220,10 +229,13 @@ def query_domains(domains, dns_servers_with_labels):
                                     server_results['A'] = sorted(server_results['A'])
 
         _mark_completed()
-        return results
+        # 计算总耗时
+        duration = time.time() - start_time
+        return results, duration
     except (KeyboardInterrupt, SystemExit):
         _mark_completed()
-        raise
+        duration = time.time() - start_time
+        return results, duration
 
 
 def mark_error():

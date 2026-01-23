@@ -32,10 +32,21 @@ def query_dns_route():
         domains = data.get('domains', [])
         dns_servers_with_labels = data.get('dns_servers') or load_dns_config()
 
-        results = query_domains(domains, dns_servers_with_labels)
-        add_dns_history(domains, dns_servers_with_labels, results)
+        # query_domains 现在返回 (results, duration_seconds)
+        results, duration_seconds = query_domains(domains, dns_servers_with_labels)
+        
+        # 保存历史记录，包含耗时信息
+        add_dns_history(domains, dns_servers_with_labels, results, duration_seconds)
 
-        return jsonify(results)
+        # 返回结果和统计信息
+        return jsonify({
+            'results': results,
+            'stats': {
+                'domain_count': len(domains),
+                'dns_server_count': len(dns_servers_with_labels),
+                'duration_seconds': round(duration_seconds, 2)
+            }
+        })
     except SystemExit:
         mark_error()
         return jsonify({"error": "查询已中断"}), 200
@@ -85,7 +96,8 @@ def save_dns_config_route():
 def get_dns_history_route():
     """获取DNS查询历史记录。"""
     try:
-        history = load_dns_history()
+        from utils.history_service import get_dns_history
+        history = get_dns_history()
         return jsonify({"history": history})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -95,7 +107,8 @@ def get_dns_history_route():
 def clear_dns_history_route():
     """清空DNS查询历史记录。"""
     try:
-        save_dns_history([])
+        from utils.history_service import clear_dns_history
+        clear_dns_history()
         return jsonify({"message": "历史记录已清空"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -105,21 +118,20 @@ def clear_dns_history_route():
 def delete_dns_history_route():
     """删除指定的DNS查询历史记录。"""
     try:
+        from utils.history_service import delete_dns_history
+        
         data = request.get_json()
         record_id = data.get('record_id')
 
         if not record_id:
             return jsonify({"error": "记录ID不能为空"}), 400
 
-        history = load_dns_history()
-        original_length = len(history)
-        history = [record for record in history if record.get('id') != record_id]
-
-        if len(history) == original_length:
+        success = delete_dns_history(record_id)
+        
+        if success:
+            return jsonify({"message": "历史记录删除成功"})
+        else:
             return jsonify({"error": "未找到指定的历史记录"}), 404
-
-        save_dns_history(history)
-        return jsonify({"message": "历史记录删除成功"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

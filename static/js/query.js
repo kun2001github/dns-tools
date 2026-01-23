@@ -108,15 +108,16 @@ async function queryDNS() {
         clearInterval(progressInterval);
         fill.style.width = '100%';
         
-        // 计算耗时
-        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        // 使用API返回的统计信息（更准确）
+        const duration = data.stats ? data.stats.duration_seconds : ((Date.now() - startTime) / 1000).toFixed(2);
         progressText.textContent = '查询完成！';
 
-        // 保存查询结果数据
+        // 保存查询结果数据 (适配新API返回格式)
         const orderedResults = {};
+        const results = data.results || data; // 支持新旧两种格式
         domains.forEach(domain => {
-            if (data[domain]) {
-                orderedResults[domain] = data[domain];
+            if (results[domain]) {
+                orderedResults[domain] = results[domain];
             }
         });
 
@@ -129,13 +130,21 @@ async function queryDNS() {
             String(now.getMinutes()).padStart(2, '0') + ':' + 
             String(now.getSeconds()).padStart(2, '0');
         
+        // 使用API返回的统计信息或前端计算
+        const queryStats = data.stats || {
+            domainCount: domains.length,
+            dnsServerCount: dns_servers.length,
+            duration_seconds: duration,
+            query_time: timestamp
+        };
+        
         document.getElementById('result').setAttribute('data-last-result', JSON.stringify(orderedResults));
         document.getElementById('result').setAttribute('data-domain-order', JSON.stringify(domains));
         document.getElementById('result').setAttribute('data-query-stats', JSON.stringify({
-            domainCount: domains.length,
-            dnsServerCount: dns_servers.length,
-            duration: duration,
-            timestamp: timestamp
+            domainCount: queryStats.domain_count || domains.length,
+            dnsServerCount: queryStats.dns_server_count || dns_servers.length,
+            duration: queryStats.duration_seconds || duration,
+            timestamp: queryStats.query_time || timestamp
         }));
         
         window.DisplayManager.renderResults(orderedResults, domains);

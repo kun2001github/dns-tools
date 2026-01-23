@@ -16,6 +16,25 @@ async function loadHistory() {
 }
 
 /**
+ * 去重历史记录 - 只保留每个域名组合的最新记录
+ */
+function deduplicateHistory(history) {
+    const seen = new Map();
+    
+    history.forEach(record => {
+        const domainsKey = record.domains.sort().join(',');
+        
+        // 如果这个域名组合还没有记录，或者当前记录的ID更大（更新），则保存
+        if (!seen.has(domainsKey) || record.id > seen.get(domainsKey).id) {
+            seen.set(domainsKey, record);
+        }
+    });
+    
+    // 返回去重后的记录数组，按时间倒序排列
+    return Array.from(seen.values()).sort((a, b) => b.id.localeCompare(a.id));
+}
+
+/**
  * 生成单个时间节点的详细内容
  */
 function generateNodeDetailContent(node) {
@@ -74,9 +93,9 @@ function generateNodeDetailContent(node) {
 }
 
 /**
- * 生成历史记录详细内容
+ * 生成历史记录详细内容（时间轴视图）
  */
-function generateHistoryDetailContent(record) {
+function generateHistoryDetailContent(record, uniqueId) {
     // 检查是否有时间节点（去重后的记录）
     if (record.time_nodes && record.time_nodes.length > 0) {
         // 按时间倒序排列
@@ -84,35 +103,44 @@ function generateHistoryDetailContent(record) {
         
         let html = ``;
         
-        // 显示时间节点选择
-        html += `<div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px;">`;
-        sortedNodes.forEach((node, index) => {
-            const isActive = index === 0 ? 'background: var(--accent-color); color: white; border-color: var(--accent-color);' : '';
-            html += `<button 
-                id="node-btn-${node.id}" 
-                class="btn btn-outline" 
-                style="padding: 6px 10px; font-size:0.7rem; width: fit-content; white-space: nowrap; border-radius: 6px; transition: all 0.2s ease; ${isActive}" 
-                onclick="showTimeNodeDetail('${node.id}')">
-                ${node.date} ${node.time}
-            </button>`;
-        });
-        html += `</div>`;
+        // 时间轴容器 - 只显示时间轴，不显示解析结果
+        html += `
+            <div class="timeline-container">
+                <div class="timeline-header">
+                    <span class="timeline-title">📊 查询时间轴</span>
+                    <span class="timeline-count">${sortedNodes.length} 次</span>
+                </div>
+                <div class="timeline-list">
+        `;
         
-        // 显示详情内容区域
-        html += `<div style="background: rgba(15, 23, 42, 0.4); border-radius: 8px; border: 1px solid var(--border-color); padding: 12px; width: 100%; box-sizing: border-box; overflow: hidden;">`;
-        sortedNodes.forEach((node, index) => {
-            const displayStyle = index === 0 ? 'block' : 'none';
-            html += `<div id="node-detail-${node.id}" style="display: ${displayStyle}; width: 100%; max-width: 100%; box-sizing: border-box;">`;
-            html += generateNodeDetailContent(node);
-            html += `</div>`;
+        sortedNodes.forEach((node) => {
+            const duration = node.duration_seconds ? `${Number(node.duration_seconds).toFixed(2)}秒` : 'N/A';
+            html += `
+                    <div class="timeline-item" id="timeline-${uniqueId}-${node.id}" 
+                        onclick="loadTimelineDetail('${uniqueId}', '${node.id}')">
+                        <span class="timeline-time">${node.date} ${node.time}</span>
+                        <span class="timeline-duration">${duration}</span>
+                    </div>
+            `;
         });
-        html += `</div>`;
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        // 详情占位区域 - 点击后显示
+        html += `<div class="timeline-details" id="timeline-details-${uniqueId}">
+            <div style="text-align:center; color:var(--text-dim); padding: 20px; font-size:0.8rem;">
+                👆 点击上方时间轴查看解析结果
+            </div>
+        </div>`;
         
         return html;
     } else {
-        // 旧格式的记录（兼容性）
-        let html = `<div style="margin-bottom:6px; margin-left:4px;">
-            <span style="color:var(--text-dim); font-size:0.75rem;">查询详情:</span>
+        // 旧格式的记录（兼容性）- 直接显示结果
+        let html = `<div style="font-size:0.75rem; margin-bottom:8px;">
+            <span style="color:var(--text-dim)">📍 ${record.timestamp}</span>
         </div>`;
         
         if (record.results) {
@@ -163,6 +191,95 @@ function generateHistoryDetailContent(record) {
 }
 
 /**
+ * 全局存储历史记录数据
+ */
+let gHistoryRecords = [];
+
+/**
+ * 加载时间轴节点的详细解析结果
+ */
+function loadTimelineDetail(uniqueId, nodeId) {
+    // 更新时间轴选中状态
+    const timelineList = document.querySelector(`#timeline-${uniqueId}-${nodeId}`)?.closest('.timeline-list');
+    if (timelineList) {
+        timelineList.querySelectorAll('.timeline-item').forEach(el => {
+            el.classList.remove('active');
+        });
+    }
+    
+    const selectedNode = document.getElementById(`timeline-${uniqueId}-${nodeId}`);
+    if (selectedNode) {
+        selectedNode.classList.add('active');
+    }
+    
+    // 从全局数据中查找对应的节点
+    let targetNode = null;
+    let targetRecord = null;
+    
+    for (const record of gHistoryRecords) {
+        if (record.time_nodes) {
+            for (const node of record.time_nodes) {
+                if (node.id === nodeId) {
+                    targetNode = node;
+                    targetRecord = record;
+                    break;
+                }
+            }
+        }
+        if (targetNode) break;
+    }
+    
+    const detailsContainer = document.getElementById(`timeline-details-${uniqueId}`);
+    if (detailsContainer && targetNode && targetNode.results) {
+        const results = targetNode.results;
+        const domains = targetRecord.domains || [];
+        
+        detailsContainer.innerHTML = `
+            <div class="timeline-result-wrapper" id="timeline-result-${uniqueId}"></div>
+        `;
+        
+        const mainResult = document.getElementById('result');
+        const timelineResultWrapper = document.getElementById(`timeline-result-${uniqueId}`);
+        
+        if (mainResult && timelineResultWrapper) {
+            const originalLastResult = mainResult.getAttribute('data-last-result');
+            const originalDomainOrder = mainResult.getAttribute('data-domain-order');
+            
+            mainResult.setAttribute('data-last-result', JSON.stringify(results));
+            mainResult.setAttribute('data-domain-order', JSON.stringify(domains));
+            
+            const stats = {
+                domainCount: domains.length,
+                dnsServerCount: targetRecord.dns_servers ? targetRecord.dns_servers.length : 0,
+                duration: targetNode.duration_seconds || 0,
+                timestamp: `${targetNode.date} ${targetNode.time}`
+            };
+            
+            mainResult.setAttribute('data-query-stats', JSON.stringify(stats));
+            
+            window.DisplayManager.renderResults(results, domains, true);
+            
+            const resultContent = mainResult.querySelector('#result-content');
+            if (resultContent) {
+                timelineResultWrapper.innerHTML = resultContent.innerHTML;
+            }
+            
+            if (originalLastResult) {
+                mainResult.setAttribute('data-last-result', originalLastResult);
+            } else {
+                mainResult.removeAttribute('data-last-result');
+            }
+            
+            if (originalDomainOrder) {
+                mainResult.setAttribute('data-domain-order', originalDomainOrder);
+            } else {
+                mainResult.removeAttribute('data-domain-order');
+            }
+        }
+    }
+}
+
+/**
  * 显示历史记录
  */
 function displayHistory(history) {
@@ -174,12 +291,30 @@ function displayHistory(history) {
         return;
     }
 
-    history.forEach(record => {
+    // 后端已经按域名组合分组并去重，直接使用
+    // 保存到全局变量（用于时间轴点击时获取详情）
+    gHistoryRecords = history;
+
+    history.forEach((record, index) => {
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item';
         
         const hasTimeNodes = record.time_nodes && record.time_nodes.length > 0;
-        const recordId = hasTimeNodes ? record.time_nodes[0].id : record.id;
+        const uniqueId = `h${index}`; // 唯一的ID用于时间轴
+        const recordId = hasTimeNodes ? (record.time_nodes[0]?.id || record.id) : record.id;
+        
+        // 生成统计信息HTML
+        let statsHtml = '';
+        if (record.stats) {
+            const duration = record.stats.duration_seconds ? `${Number(record.stats.duration_seconds).toFixed(2)}秒` : 'N/A';
+            statsHtml = `
+                <div style="font-size:0.7rem; color:var(--text-dim); margin-top:4px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <span>📊 域名: ${record.stats.domain_count}</span>
+                    <span>🔍 DNS: ${record.stats.dns_server_count}</span>
+                    <span>⏱️ 耗时: ${duration}</span>
+                </div>
+            `;
+        }
         
         historyItem.innerHTML = `
             <div class="delete-btn" onclick="deleteHistoryItem('${recordId}')" title="删除记录">
@@ -193,7 +328,8 @@ function displayHistory(history) {
             <div class="history-header">
                 <span class="history-time">${record.date} ${record.time}</span>
                 <div class="history-domains" title="${record.domains.join(', ')}">${record.domains.join(', ')}</div>
-                ${hasTimeNodes ? `<div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">共 ${record.time_nodes.length} 次查询记录</div>` : ''}
+                ${hasTimeNodes ? `<div style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">📊 共 ${record.time_nodes.length} 次查询记录</div>` : ''}
+                ${statsHtml}
             </div>
             <div style="display: flex; gap: 8px;">
                 <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="copyToDomains('${record.domains.join('\\n')}')">
@@ -203,15 +339,7 @@ function displayHistory(history) {
                     </svg>
                     <span>填入</span>
                 </button>
-                <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="loadHistoryResult('${recordId}')">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; transition: all 0.3s ease;">
-                        <path d="M3 15v4c0 1-1 2-2 2H7c-1 0-2-1-2-2v-4"></path>
-                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                        <line x1="7" y1="3" x2="7" y2="8"></line>
-                    </svg>
-                    <span>加载结果</span>
-                </button>
-                <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="toggleHistoryDetail('${recordId}')">
+                <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="toggleHistoryDetail('${uniqueId}')">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; transition: all 0.3s ease;">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
@@ -219,8 +347,8 @@ function displayHistory(history) {
                     <span>详情</span>
                 </button>
             </div>
-            <div class="history-details" id="detail-${recordId}">
-                ${generateHistoryDetailContent(record)}
+            <div class="history-details" id="detail-${uniqueId}">
+                ${generateHistoryDetailContent(record, uniqueId)}
             </div>
         `;
         historyList.appendChild(historyItem);
@@ -238,37 +366,6 @@ function toggleHistoryDetail(id) {
 }
 
 /**
- * 显示时间节点详情
- */
-function showTimeNodeDetail(nodeId) {
-    // 隐藏所有节点详情
-    document.querySelectorAll('[id^="node-detail-"]').forEach(el => {
-        el.style.display = 'none';
-    });
-    
-    // 重置所有按钮样式
-    document.querySelectorAll('[id^="node-btn-"]').forEach(el => {
-        el.style.background = 'transparent';
-        el.style.color = 'var(--text-main)';
-        el.style.border = '1px solid var(--border-color)';
-    });
-    
-    // 显示选中的节点详情
-    const targetDetail = document.getElementById(`node-detail-${nodeId}`);
-    if (targetDetail) {
-        targetDetail.style.display = 'block';
-    }
-    
-    // 高亮选中的按钮
-    const targetBtn = document.getElementById(`node-btn-${nodeId}`);
-    if (targetBtn) {
-        targetBtn.style.background = 'var(--accent-color)';
-        targetBtn.style.color = 'white';
-        targetBtn.style.border = '1px solid var(--accent-color)';
-    }
-}
-
-/**
  * 复制域名到输入框
  */
 function copyToDomains(text) {
@@ -283,63 +380,7 @@ function copyToDomains(text) {
     }, 1000);
 }
 
-/**
- * 加载历史记录结果到主结果区域
- */
-function loadHistoryResult(recordId) {
-    fetch('/get_dns_history')
-        .then(res => res.json())
-        .then(data => {
-            const history = data.history || [];
-            let targetRecord = null;
-            let targetNode = null;
 
-            // 查找匹配的历史记录
-            for (const record of history) {
-                if (record.time_nodes && record.time_nodes.length > 0) {
-                    const mainRecordId = record.time_nodes[0].id;
-                    if (mainRecordId === recordId) {
-                        targetRecord = record;
-                        targetNode = record.time_nodes[0];
-                        break;
-                    }
-                    for (const node of record.time_nodes) {
-                        if (node.id === recordId) {
-                            targetRecord = record;
-                            targetNode = node;
-                            break;
-                        }
-                    }
-                    if (targetNode) break;
-                } else if (record.id === recordId) {
-                    targetRecord = record;
-                    targetNode = record;
-                    break;
-                }
-            }
-
-            if (targetRecord && targetNode && targetNode.results) {
-                const results = targetNode.results;
-                const domains = targetRecord.domains || [];
-
-                document.getElementById('result').setAttribute('data-last-result', JSON.stringify(results));
-                document.getElementById('result').setAttribute('data-domain-order', JSON.stringify(domains));
-
-                window.DisplayManager.renderResults(results, domains);
-                window.UIManager.showNotification('已加载历史记录结果，保持原始域名顺序');
-
-                setTimeout(() => {
-                    document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
-                }, 100);
-            } else {
-                alert('未找到对应的历史记录');
-            }
-        })
-        .catch(err => {
-            console.error('加载历史记录失败:', err);
-            alert('加载历史记录失败');
-        });
-}
 
 /**
  * 删除历史记录
@@ -356,19 +397,21 @@ function showDeleteConfirm(recordId) {
     if (confirmBtn) {
         confirmBtn.remove();
     } else {
-        const historyItem = document.querySelector(`[onclick*="${recordId}"]`).closest('.history-item');
-        const confirmButton = document.createElement('button');
-        confirmButton.className = 'delete-confirm';
-        confirmButton.id = `confirm-${recordId}`;
-        confirmButton.textContent = '确认删除';
-        confirmButton.onclick = () => confirmDelete(recordId);
-        historyItem.appendChild(confirmButton);
-        
-        setTimeout(() => {
-            if (document.getElementById(`confirm-${recordId}`)) {
-                confirmButton.remove();
-            }
-        }, 3000);
+        const historyItem = document.querySelector(`[onclick*="${recordId}"]`)?.closest('.history-item');
+        if (historyItem) {
+            const confirmButton = document.createElement('button');
+            confirmButton.className = 'delete-confirm';
+            confirmButton.id = `confirm-${recordId}`;
+            confirmButton.textContent = '确认删除';
+            confirmButton.onclick = () => confirmDelete(recordId);
+            historyItem.appendChild(confirmButton);
+            
+            setTimeout(() => {
+                if (document.getElementById(`confirm-${recordId}`)) {
+                    confirmButton.remove();
+                }
+            }, 3000);
+        }
     }
 }
 
@@ -435,10 +478,10 @@ async function confirmClearAll() {
 window.HistoryManager = {
     loadHistory,
     displayHistory,
+    deduplicateHistory,
     toggleHistoryDetail,
-    showTimeNodeDetail,
+    loadTimelineDetail,
     copyToDomains,
-    loadHistoryResult,
     deleteHistoryItem,
     clearHistory
 };

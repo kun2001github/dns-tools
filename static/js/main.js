@@ -40,7 +40,6 @@ function displayHistory(history) { return window.HistoryManager.displayHistory(h
 function toggleHistoryDetail(id) { return window.HistoryManager.toggleHistoryDetail(id); }
 function showTimeNodeDetail(nodeId) { return window.HistoryManager.showTimeNodeDetail(nodeId); }
 function copyToDomains(text) { return window.HistoryManager.copyToDomains(text); }
-function loadHistoryResult(recordId) { return window.HistoryManager.loadHistoryResult(recordId); }
 function deleteHistoryItem(recordId) { return window.HistoryManager.deleteHistoryItem(recordId); }
 function clearHistory() { return window.HistoryManager.clearHistory(); }
 

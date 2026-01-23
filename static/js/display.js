@@ -158,7 +158,7 @@ function renderStatsBar(container, queryStats) {
                 </svg>
                 <div class="stats-text">
                     <span class="stats-label">本次查询耗时</span>
-                    <span class="stats-value">${queryStats.duration}秒</span>
+                    <span class="stats-value">${Number(queryStats.duration).toFixed(2)}秒</span>
                 </div>
             </div>
             <div class="stats-divider"></div>
