@@ -1,0 +1,42 @@
+[
+  {
+    "name": "ipwhois",
+    "url": "https://ipwhois.app/json/{ip}?format=json",
+    "parser": "ipwhois"
+  },
+  {
+    "name": "ip-api",
+    "url": "http://ip-api.com/json/{ip}?lang=zh-CN",
+    "parser": "ip-api"
+  },
+  {
+    "name": "ip-sb",
+    "url": "https://api.ip.sb/geoip/{ip}",
+    "parser": "ip-sb"
+  },
+  {
+    "name": "ipapi-co",
+    "url": "https://ipapi.co/{ip}/json/",
+    "parser": "ipapi-co"
+  },
+  {
+    "name": "freeipapi",
+    "url": "https://freeipapi.com/api/json/{ip}",
+    "parser": "freeipapi"
+  },
+  {
+    "name": "pconline",
+    "url": "https://whois.pconline.com.cn/ipJson.jsp?ip={ip}&json=true",
+    "parser": "pconline"
+  },
+  {
+    "name": "vore",
+    "url": "https://api.vore.top/api/IPdata?ip={ip}",
+    "parser": "vore"
+  },
+  {
+    "name": "geojs",
+    "url": "https://get.geojs.io/v1/ip/geo/{ip}.json",
+    "parser": "geojs"
+  }
+]

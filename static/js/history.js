@@ -47,6 +47,7 @@ function generateNodeDetailContent(node) {
         html += `<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom:8px; width: 100%; box-sizing: border-box; max-width: 100%;">`;
         
         for (const [domain, domainResults] of Object.entries(node.results)) {
+            const shownIpInfo = new Set();
             // 域名容器
             html += `<div style="margin-bottom:12px; width: 100%; box-sizing: border-box;">
                 <div style="color:var(--accent-color); font-size:0.85rem; font-weight:600; margin-bottom:6px; padding-left:8px; border-left: 3px solid var(--accent-color); background: rgba(56, 189, 248, 0.05); padding: 4px 8px; border-radius: 4px; width: 100%; box-sizing: border-box; word-break: break-all;">🌐 ${domain}</div>`;
@@ -61,10 +62,22 @@ function generateNodeDetailContent(node) {
                     html += `<div style="margin-bottom:4px; width: 100%;">`;
                     const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
                     ips.forEach(ip => { 
-                        const displayIp = window.DNSUtils.cleanARecordValue(ip);
-                        html += `<div class="a-record-container" data-a-ip="${displayIp}" onclick="window.DNSUtils.copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
+                        const display = window.DisplayManager.formatARecordDisplay(ip, null);
+                        const showInfo = display.copyable && !shownIpInfo.has(display.copy);
+                        if (showInfo) {
+                            shownIpInfo.add(display.copy);
+                        }
+                        const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                        const containerClass = display.copyable ? 'a-record-container' : '';
+                        const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
+                        const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
+                        const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
+                        const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                        html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
                             <span class="record-tag" style="font-size:0.65rem; padding:2px 8px; white-space: nowrap;">A</span>
-                            <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%;">${displayIp}</span>
+                            ${tagHtml}
+                            <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%; ${display.style}">${display.text}</span>
+                            ${detailHtml}
                         </div>`; 
                     });
 
@@ -147,6 +160,7 @@ function generateHistoryDetailContent(record, uniqueId) {
             html += `<div style="background: rgba(15, 23, 42, 0.3); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom:8px;">`;
             
             for (const [domain, domainResults] of Object.entries(record.results)) {
+                const shownIpInfo = new Set();
                 html += `<div style="margin-bottom:12px;">
                     <div style="color:var(--accent-color); font-size:0.85rem; font-weight:600; margin-bottom:6px; padding-left:8px; border-left: 3px solid var(--accent-color); background: rgba(56, 189, 248, 0.05); padding: 4px 8px; border-radius: 4px;">🌐 ${domain}</div>`;
                 
@@ -158,10 +172,22 @@ function generateHistoryDetailContent(record, uniqueId) {
                         html += `<div style="margin-bottom:4px;">`;
                         const ips = Array.isArray(serverResults.A) ? serverResults.A : [serverResults.A];
                         ips.forEach(ip => { 
-                            const displayIp = window.DNSUtils.cleanARecordValue(ip);
-                            html += `<div class="a-record-container" data-a-ip="${displayIp}" onclick="window.DNSUtils.copyToClipboard('${displayIp}', event)" title="点击复制IP地址" style="margin-bottom:2px;">
+                            const display = window.DisplayManager.formatARecordDisplay(ip, null);
+                            const showInfo = display.copyable && !shownIpInfo.has(display.copy);
+                            if (showInfo) {
+                                shownIpInfo.add(display.copy);
+                            }
+                            const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                            const containerClass = display.copyable ? 'a-record-container' : '';
+                            const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
+                            const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
+                            const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
+                            const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                            html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="margin-bottom:2px;">
                                 <span class="record-tag" style="font-size:0.65rem; padding:2px 8px;">A</span>
-                                <span class="record-value" style="font-size:0.8rem;">${displayIp}</span>
+                                ${tagHtml}
+                                <span class="record-value" style="font-size:0.8rem; ${display.style}">${display.text}</span>
+                                ${detailHtml}
                             </div>`; 
                         });
 
@@ -262,6 +288,7 @@ function loadTimelineDetail(uniqueId, nodeId) {
             const resultContent = mainResult.querySelector('#result-content');
             if (resultContent) {
                 timelineResultWrapper.innerHTML = resultContent.innerHTML;
+                window.DisplayManager.refreshIpInfoTags(timelineResultWrapper);
             }
             
             if (originalLastResult) {
@@ -355,6 +382,7 @@ function displayHistory(history) {
     });
 
     window.DisplayManager.bindARecordHoverHighlight(historyList);
+    window.DisplayManager.refreshIpInfoTags(historyList);
 }
 
 /**

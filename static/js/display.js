@@ -52,29 +52,297 @@ function formatARecordDisplay(rawValue, consistency) {
 
     // 错误/状态文案：不提供复制
     if (window.DNSUtils.isARecordNonCopyable(rawStr)) {
-        return { text: window.DNSUtils.cleanARecordValue(rawStr), style: 'color: var(--error-color);', copyable: false, copy: '' };
+        return { text: window.DNSUtils.cleanARecordValue(rawStr), style: 'color: var(--error-color);', copyable: false, copy: '', color: null };
     }
 
     const cleaned = window.DNSUtils.cleanARecordValue(rawStr);
 
     // 非 IP：当作普通文案显示（不复制）
     if (!window.DNSUtils.isLikelyIPv4(cleaned)) {
-        return { text: cleaned, style: 'color: var(--text-dim);', copyable: false, copy: '' };
+        return { text: cleaned, style: 'color: var(--text-dim);', copyable: false, copy: '', color: null };
     }
 
     const count = consistency && consistency.serverCountByIp ? (consistency.serverCountByIp.get(cleaned) || 1) : 1;
     const color = (count >= 2 && consistency && consistency.colorByIp) ? consistency.colorByIp.get(cleaned) : null;
 
     if (color) {
-        return { text: cleaned, style: `color: ${color}; font-weight: 800;`, copyable: true, copy: cleaned };
+        return { text: cleaned, style: `color: ${color}; font-weight: 800;`, copyable: true, copy: cleaned, color };
     }
 
     // 没有"多 DNS 一致出现"时，默认白色
-    return { text: cleaned, style: '', copyable: true, copy: cleaned };
+    return { text: cleaned, style: '', copyable: true, copy: cleaned, color: null };
+}
+
+const ipInfoCache = new Map();
+let ipInfoRequestId = 0;
+let ipInfoRequeryBound = false;
+
+function toAlphaColor(color, alpha) {
+    if (!color) return '';
+    const hslMatch = color.match(/^hsl\((.+)\)$/i);
+    if (hslMatch) {
+        return `hsla(${hslMatch[1]}, ${alpha})`;
+    }
+    const rgbMatch = color.match(/^rgb\((.+)\)$/i);
+    if (rgbMatch) {
+        return `rgba(${rgbMatch[1]}, ${alpha})`;
+    }
+    return '';
+}
+
+function applyTagColor(tag, color) {
+    if (!color) return;
+    const bg = toAlphaColor(color, 0.18);
+    tag.style.color = color;
+    tag.style.border = `1px solid ${color}`;
+    if (bg) {
+        tag.style.background = bg;
+    }
+}
+
+function escapeHtml(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatDateTime(timeString) {
+    if (!timeString) return '';
+    try {
+        const date = new Date(timeString);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year}年${month}月${day}日 ${hours}:${minutes}:${seconds}`;
+    } catch (e) {
+        return String(timeString);
+    }
+}
+
+function stringifyRaw(raw) {
+    if (raw === undefined || raw === null) return '';
+    try {
+        return JSON.stringify(raw, null, 2);
+    } catch (e) {
+        return String(raw);
+    }
+}
+
+function buildIpInfoTagsHtml(container, ip, info) {
+    const nodes = container.querySelectorAll(`[data-ip-tags="${ip}"]`);
+    if (!nodes.length) return;
+
+    nodes.forEach(node => {
+        node.innerHTML = '';
+        const ipColor = node.getAttribute('data-ip-color');
+        if (!info || info.error) {
+            const tag = document.createElement('span');
+            tag.className = 'ip-info-tag error';
+            tag.textContent = '查询失败';
+            node.appendChild(tag);
+            return;
+        }
+
+        const tags = [];
+        if (info.isp) {
+            const tag = document.createElement('span');
+            tag.className = 'ip-info-tag isp';
+            tag.textContent = `运营商:${info.isp}`;
+            tag.title = tag.textContent;
+            tags.push(tag);
+        }
+        if (info.country) {
+            const tag = document.createElement('span');
+            tag.className = 'ip-info-tag country';
+            tag.textContent = `国家:${info.country}`;
+            tag.title = tag.textContent;
+            tags.push(tag);
+        }
+        const regionParts = [info.region, info.city].filter(Boolean);
+        if (regionParts.length) {
+            const tag = document.createElement('span');
+            tag.className = 'ip-info-tag region';
+            tag.textContent = `地区:${regionParts.join(' ')}`;
+            tag.title = tag.textContent;
+            tags.push(tag);
+        }
+        if (info.ip_type) {
+            const tag = document.createElement('span');
+            tag.className = 'ip-info-tag type';
+            tag.textContent = `类型:${info.ip_type}`;
+            tag.title = tag.textContent;
+            tags.push(tag);
+        }
+        if (!tags.length) {
+            const tag = document.createElement('span');
+            tag.className = 'ip-info-tag';
+            tag.textContent = '未知';
+            tag.title = tag.textContent;
+            tags.push(tag);
+        }
+        tags.forEach(tag => {
+            if (ipColor) {
+                applyTagColor(tag, ipColor);
+            }
+            node.appendChild(tag);
+        });
+    });
+}
+
+function buildIpInfoDetailHtml(container, ip, info) {
+    const nodes = container.querySelectorAll(`[data-ip-detail="${ip}"]`);
+    if (!nodes.length) return;
+
+    const isp = info && info.isp ? info.isp : '';
+    const country = info && info.country ? info.country : '';
+    const region = info && info.region ? info.region : '';
+    const city = info && info.city ? info.city : '';
+    const ipType = info && info.ip_type ? info.ip_type : '';
+    const rawText = info ? stringifyRaw(info._raw) : '';
+    const urlText = info && info._source_url ? info._source_url : '';
+    const timeText = info && info._fetched_at ? formatDateTime(info._fetched_at) : '';
+    const errorText = info && info.error ? info.error : '';
+
+    const detailHtml = info
+        ? `
+            <div class="ip-info-detail-content">
+                <div class="ip-info-detail-title">${errorText ? 'IP详情（查询失败）' : 'IP详情'}</div>
+                ${errorText ? `<div class="ip-info-detail-error">错误信息：${escapeHtml(errorText)}</div>` : ''}
+                <div class="ip-info-detail-raw">
+                    <pre>${escapeHtml(rawText || '无')}</pre>
+                </div>
+                <div class="ip-info-detail-meta">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span>请求URL：</span>
+                        <span style="flex: 1; word-break: break-all;">${escapeHtml(urlText || '无')}</span>
+                        ${urlText ? `<button class="btn btn-outline" onclick="window.DNSUtils.copyToClipboard('${escapeHtml(urlText)}', event)" style="padding: 2px 8px; font-size: 0.7rem; min-width: auto;" title="点击复制URL">复制</button>` : ''}
+                    </div>
+                    <div>查询时间：${escapeHtml(timeText || '无')}</div>
+                </div>
+                <div class="ip-info-detail-actions">
+                    <button class="btn btn-outline ip-info-requery-btn" data-ip-requery="${escapeHtml(ip)}">重新查询</button>
+                </div>
+            </div>
+        `
+        : `
+            <div class="ip-info-detail-content">
+                <div class="ip-info-detail-title">IP详情</div>
+                <div class="ip-info-detail-empty">查询中...</div>
+                <div class="ip-info-detail-actions">
+                    <button class="btn btn-outline ip-info-requery-btn" data-ip-requery="${escapeHtml(ip)}">重新查询</button>
+                </div>
+            </div>
+        `;
+
+    nodes.forEach(node => {
+        node.innerHTML = detailHtml;
+    });
+}
+
+function setIpInfoLoading(container, ip) {
+    const nodes = container.querySelectorAll(`[data-ip-tags="${ip}"]`);
+    if (!nodes.length) return;
+    nodes.forEach(node => {
+        if (node.childElementCount > 0) return;
+        const tag = document.createElement('span');
+        tag.className = 'ip-info-tag loading';
+        tag.textContent = '查询中';
+        node.appendChild(tag);
+    });
+}
+
+async function requestIpInfo(ips, force) {
+    let data = null;
+    try {
+        const response = await fetch('/query_ip_info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ips, force: !!force })
+        });
+        data = await response.json();
+    } catch (e) {
+        data = null;
+    }
+    return data;
+}
+
+async function refreshIpInfoTags(container) {
+    const scope = container || document;
+    const nodes = scope.querySelectorAll('[data-ip-tags]');
+    if (!nodes.length) return;
+
+    const ips = new Set();
+    nodes.forEach(node => {
+        const ip = node.getAttribute('data-ip-tags');
+        if (window.DNSUtils.isLikelyIPv4(ip)) {
+            ips.add(ip);
+        }
+    });
+
+    const missing = [];
+    ips.forEach(ip => {
+        if (ipInfoCache.has(ip)) {
+            const cached = ipInfoCache.get(ip);
+            buildIpInfoTagsHtml(scope, ip, cached);
+            buildIpInfoDetailHtml(scope, ip, cached);
+        } else {
+            setIpInfoLoading(scope, ip);
+            buildIpInfoDetailHtml(scope, ip, null);
+            missing.push(ip);
+        }
+    });
+
+    if (!missing.length) return;
+
+    const currentRequestId = ++ipInfoRequestId;
+    const data = await requestIpInfo(missing, false);
+
+    if (currentRequestId !== ipInfoRequestId) return;
+
+    const results = data && data.results ? data.results : {};
+    missing.forEach(ip => {
+        const info = results[ip] || { error: '查询失败' };
+        ipInfoCache.set(ip, info);
+        buildIpInfoTagsHtml(scope, ip, info);
+        buildIpInfoDetailHtml(scope, ip, info);
+    });
+}
+
+function bindIpInfoRequery() {
+    if (ipInfoRequeryBound) return;
+    document.addEventListener('click', async (event) => {
+        const btn = event.target.closest('[data-ip-requery]');
+        if (!btn && event.target.closest('.ip-info-detail')) {
+            event.stopPropagation();
+            return;
+        }
+        if (!btn) return;
+        event.stopPropagation();
+        const ip = btn.getAttribute('data-ip-requery');
+        if (!ip || !window.DNSUtils.isLikelyIPv4(ip)) return;
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = '查询中';
+        const data = await requestIpInfo([ip], true);
+        const results = data && data.results ? data.results : {};
+        const info = results[ip] || { error: '查询失败' };
+        ipInfoCache.set(ip, info);
+        buildIpInfoTagsHtml(document, ip, info);
+        buildIpInfoDetailHtml(document, ip, info);
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }, true);
+    ipInfoRequeryBound = true;
 }
 
 /**
- * 绑定A记录悬停高亮
+ * 绑定A记录悬停高亮和IP详情弹窗交互
  */
 function bindARecordHoverHighlight(root) {
     const scope = root || document;
@@ -99,21 +367,117 @@ function bindARecordHoverHighlight(root) {
         });
     };
 
+    // 存储定时器
+    const hideTimers = new Map();
+
     items.forEach(el => {
         const ip = el.getAttribute('data-a-ip');
         if (!ip) {
             return;
         }
-        el.addEventListener('mouseenter', () => {
+        
+        const tooltip = el.querySelector('.ip-info-detail');
+        if (!tooltip) return;
+
+        // 清除该IP的所有定时器
+        const clearTimer = () => {
+            const timer = hideTimers.get(ip);
+            if (timer) {
+                clearTimeout(timer);
+                hideTimers.delete(ip);
+            }
+        };
+
+        // 显示弹窗
+        const showTooltip = () => {
             clearAll();
+            clearTimer();
             const group = listByIp.get(ip);
             if (group) {
                 group.forEach(node => {
                     node.classList.add('a-record-highlight');
                 });
             }
+
+            // 智能定位弹窗
+            tooltip.style.display = 'block';
+            tooltip.style.visibility = 'hidden';
+            tooltip.style.opacity = '0';
+            tooltip.style.pointerEvents = 'none';
+            tooltip.style.transform = 'translateY(-10px) scale(0.95)';
+
+            const detailContent = tooltip.querySelector('.ip-info-detail-content');
+            const maxWidth = Math.max(260, Math.min(520, window.innerWidth - 24));
+            tooltip.style.maxWidth = `${maxWidth}px`;
+
+            const rect = el.getBoundingClientRect();
+            let tooltipRect = tooltip.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceAbove = rect.top;
+
+            const useAbove = spaceBelow < tooltipRect.height && spaceAbove > spaceBelow;
+            if (useAbove) {
+                tooltip.style.top = 'auto';
+                tooltip.style.bottom = '100%';
+                tooltip.style.marginBottom = '8px';
+                tooltip.style.marginTop = '0';
+            } else {
+                tooltip.style.top = '100%';
+                tooltip.style.bottom = 'auto';
+                tooltip.style.marginTop = '8px';
+                tooltip.style.marginBottom = '0';
+            }
+
+            if (rect.left + tooltipRect.width > window.innerWidth) {
+                tooltip.style.left = 'auto';
+                tooltip.style.right = '0';
+            } else {
+                tooltip.style.left = '0';
+                tooltip.style.right = 'auto';
+            }
+
+            if (detailContent) {
+                const verticalSpace = useAbove ? spaceAbove : spaceBelow;
+                const maxHeight = Math.max(220, Math.min(480, verticalSpace - 16));
+                detailContent.style.maxHeight = `${maxHeight}px`;
+                detailContent.style.overflow = 'auto';
+            }
+
+            tooltip.style.visibility = 'visible';
+            setTimeout(() => {
+                tooltip.style.opacity = '1';
+                tooltip.style.pointerEvents = 'auto';
+                tooltip.style.transform = 'translateY(0) scale(1)';
+            }, 10);
+        };
+
+        // 延迟隐藏弹窗
+        const hideTooltip = () => {
+            clearTimer();
+            const timer = setTimeout(() => {
+                tooltip.style.opacity = '0';
+                tooltip.style.pointerEvents = 'none';
+                tooltip.style.transform = 'translateY(-10px) scale(0.95)';
+                setTimeout(() => {
+                    tooltip.style.display = 'none';
+                }, 300);
+                clearAll();
+            }, 150); // 150ms延迟，给用户时间移动到弹窗
+            hideTimers.set(ip, timer);
+        };
+
+        el.addEventListener('mouseenter', showTooltip);
+        el.addEventListener('mouseleave', hideTooltip);
+
+        // 弹窗本身的交互
+        tooltip.addEventListener('mouseenter', clearTimer);
+        tooltip.addEventListener('mouseleave', hideTooltip);
+
+        // 点击弹窗内容时阻止隐藏
+        tooltip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearTimer();
         });
-        el.addEventListener('mouseleave', clearAll);
     });
 }
 
@@ -235,24 +599,7 @@ function renderResults(data, domainOrder, forceRecreateStats = false) {
         }
     }
 
-    // 创建/获取内容容器（包裹结果内容，不包含统计栏）
-    let contentContainer = container.querySelector('#result-content');
-    if (!contentContainer) {
-        contentContainer = document.createElement('div');
-        contentContainer.id = 'result-content';
-        container.appendChild(contentContainer);
-    } else {
-        // 只清空内容容器，保留统计栏
-        contentContainer.innerHTML = '';
-    }
-
-    // 强制重新创建时，先移除现有统计栏
-    if (forceRecreateStats) {
-        const existingStatsBar = container.querySelector('#stats-bar');
-        if (existingStatsBar) {
-            existingStatsBar.remove();
-        }
-    }
+    container.innerHTML = '';
 
     // 渲染统计栏（仅在首次或强制重新创建时）
     if (queryStats && domainsToRender.length > 0) {
@@ -262,14 +609,16 @@ function renderResults(data, domainOrder, forceRecreateStats = false) {
     if (window.AppState.isHorizontalView) {
         // 横排视图模式
         container.classList.add('horizontal-view');
-        renderHorizontalView(contentContainer, resultsData, domainsToRender, dnsServers);
+        renderHorizontalView(container, resultsData, domainsToRender, dnsServers);
     } else {
         // 原始的卡片视图模式
         container.classList.remove('horizontal-view');
-        renderCardView(contentContainer, resultsData, domainsToRender, dnsServers);
+        renderCardView(container, resultsData, domainsToRender, dnsServers);
     }
 
     bindARecordHoverHighlight(container);
+    bindIpInfoRequery(container);
+    refreshIpInfoTags(container);
 }
 
 /**
@@ -294,6 +643,7 @@ function renderHorizontalView(container, resultsData, domainsToRender, dnsServer
         dnsGrid.className = 'horizontal-dns-grid';
 
         const consistency = buildAConsistency(results, dnsServers);
+        const shownIpInfo = new Set();
 
         dnsServers.forEach(dnsServerConfig => {
             const dnsCell = document.createElement('div');
@@ -310,13 +660,25 @@ function renderHorizontalView(container, resultsData, domainsToRender, dnsServer
                     const ips = Array.isArray(records.A) ? records.A : [records.A];
                     ips.forEach(ip => {
                         const display = formatARecordDisplay(ip, consistency);
+                        const showInfo = display.copyable && !shownIpInfo.has(display.copy);
+                        if (showInfo) {
+                            shownIpInfo.add(display.copy);
+                        }
                         const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
                         const containerClass = display.copyable ? 'a-record-container' : '';
                         const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
+                        const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
+                        const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
+                        const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                        const tagsBlock = tagHtml ? `<div>${tagHtml}</div>` : '';
 
                         dnsContent += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="margin-bottom: 4px;">
-                            <span class="record-tag" style="font-size:0.6rem; padding:1px 6px;">A</span>
-                            <span style="${display.style}">${display.text}</span>
+                            ${tagsBlock}
+                            <div>
+                                <span class="record-tag" style="font-size:0.6rem; padding:1px 6px;">A</span>
+                                <span style="${display.style}">${display.text}</span>
+                            </div>
+                            ${detailHtml}
                         </div>`;
                     });
                 }
@@ -362,6 +724,7 @@ function renderCardView(container, resultsData, domainsToRender, dnsServers) {
         let html = `<div class="domain-title">${domain}</div>`;
 
         const consistency = buildAConsistency(results, dnsServers);
+        const shownIpInfo = new Set();
 
         // 按照DNS配置的顺序显示结果
         dnsServers.forEach(dnsServerConfig => {
@@ -373,14 +736,25 @@ function renderCardView(container, resultsData, domainsToRender, dnsServers) {
                     const ips = Array.isArray(records.A) ? records.A : [records.A];
                     ips.forEach(ip => {
                         const display = formatARecordDisplay(ip, consistency);
-
+                        const showInfo = display.copyable && !shownIpInfo.has(display.copy);
+                        if (showInfo) {
+                            shownIpInfo.add(display.copy);
+                        }
                         const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
                         const containerClass = display.copyable ? 'a-record-container' : '';
                         const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
+                        const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
+                        const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
+                        const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                        const tagsBlock = tagHtml ? `<div style="margin-bottom: 4px;">${tagHtml}</div>` : '';
 
-                        html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 4px;">
-                            <span class="record-tag">A</span>
-                            <span class="record-value" style="${display.style}">${display.text}</span>
+                        html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="padding: 4px; border-radius: 4px;">
+                            ${tagsBlock}
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="record-tag">A</span>
+                                <span class="record-value" style="${display.style}">${display.text}</span>
+                            </div>
+                            ${detailHtml}
                         </div>`;
                     });
                 }
@@ -434,6 +808,7 @@ window.DisplayManager = {
     buildAConsistency,
     formatARecordDisplay,
     bindARecordHoverHighlight,
+    refreshIpInfoTags,
     renderResults,
     toggleViewMode
 };

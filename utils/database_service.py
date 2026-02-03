@@ -44,6 +44,27 @@ def init_database():
             FOREIGN KEY (query_id) REFERENCES queries(query_id) ON DELETE CASCADE
         )
     ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ip_info_cache (
+            ip TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            ip_type TEXT,
+            has_error INTEGER NOT NULL DEFAULT 0,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    cursor.execute('PRAGMA table_info(ip_info_cache)')
+    columns = {row[1] for row in cursor.fetchall()}
+    if 'full_response' not in columns:
+        cursor.execute('ALTER TABLE ip_info_cache ADD COLUMN full_response TEXT')
+    if 'request_url' not in columns:
+        cursor.execute('ALTER TABLE ip_info_cache ADD COLUMN request_url TEXT')
+    if 'query_time' not in columns:
+        cursor.execute('ALTER TABLE ip_info_cache ADD COLUMN query_time TEXT')
+    if 'ip_type' not in columns:
+        cursor.execute('ALTER TABLE ip_info_cache ADD COLUMN ip_type TEXT')
     
     # 创建索引以提高查询性能
     cursor.execute('''
@@ -60,9 +81,90 @@ def init_database():
         CREATE INDEX IF NOT EXISTS idx_stats_query_id 
         ON query_stats(query_id)
     ''')
+
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_ip_info_updated_at
+        ON ip_info_cache(updated_at)
+    ''')
+
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_ip_info_has_error
+        ON ip_info_cache(has_error)
+    ''')
     
     conn.commit()
     conn.close()
+
+
+def get_ip_info_cache(ip: str) -> Optional[Dict[str, Any]]:
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT data, full_response, request_url, query_time, ip_type FROM ip_info_cache WHERE ip = ?', (ip,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            data = json.loads(row['data']) if row['data'] else {}
+            if row['full_response'] and '_raw' not in data:
+                try:
+                    data['_raw'] = json.loads(row['full_response'])
+                except json.JSONDecodeError:
+                    data['_raw'] = row['full_response']
+            if row['request_url'] and '_source_url' not in data:
+                data['_source_url'] = row['request_url']
+            if row['query_time'] and '_fetched_at' not in data:
+                data['_fetched_at'] = row['query_time']
+            if row['ip_type'] and 'ip_type' not in data:
+                data['ip_type'] = row['ip_type']
+            return data
+        return None
+    except Exception as e:
+        print(f"读取IP信息缓存失败: {e}")
+        return None
+
+
+def save_ip_info_cache(ip: str, info: Dict[str, Any]) -> bool:
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        data_json = json.dumps(info, ensure_ascii=False)
+        has_error = 1 if isinstance(info, dict) and info.get('error') else 0
+        full_response = None
+        if isinstance(info, dict) and info.get('_raw') is not None:
+            full_response = json.dumps(info.get('_raw'), ensure_ascii=False)
+        request_url = info.get('_source_url') if isinstance(info, dict) else None
+        query_time = info.get('_fetched_at') if isinstance(info, dict) else None
+        ip_type = info.get('ip_type') if isinstance(info, dict) else None
+        cursor.execute('''
+            INSERT OR REPLACE INTO ip_info_cache (ip, data, full_response, request_url, query_time, ip_type, has_error, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (ip, data_json, full_response, request_url, query_time, ip_type, has_error))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"保存IP信息缓存失败: {e}")
+        return False
+
+
+def delete_expired_ip_info_errors(days: int) -> bool:
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute(
+            'DELETE FROM ip_info_cache WHERE has_error = 1 AND updated_at < datetime("now", ?)',
+            (f'-{days} days',)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"清理过期IP错误缓存失败: {e}")
+        return False
 
 
 def save_query_with_stats(
