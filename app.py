@@ -1,12 +1,13 @@
 """Flask 应用入口：提供 DNS 查询、进度、配置与历史记录接口。"""
 import json
 import os
+import random
 import re
 import signal
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from flask import Flask, request, jsonify, render_template
@@ -24,15 +25,57 @@ from utils.storage import (
 from utils.database_service import (
     get_ip_info_cache,
     save_ip_info_cache,
-    delete_expired_ip_info_errors
+    delete_expired_ip_info_errors,
+    delete_expired_ip_info_cache
 )
+from utils.request_logger import log_request, should_log_request
 
 
 
 app = Flask(__name__)
-IP_INFO_TIMEOUT = 4
-IP_INFO_ERROR_TTL_DAYS = 7
+
+# 请求日志中间件
+@app.before_request
+def before_request_logging():
+    """记录请求开始时间和其他信息。"""
+    if should_log_request(request.path):
+        request._start_time = datetime.now()
+        request._log_data = {
+            'endpoint': request.path,
+            'method': request.method,
+            'ip_address': request.remote_addr,
+            'user_agent': request.headers.get('User-Agent', ''),
+            'request_params': json.dumps(dict(request.args)) if request.args else None
+        }
+
+@app.after_request
+def after_request_logging(response):
+    """记录请求日志。"""
+    if hasattr(request, '_start_time') and hasattr(request, '_log_data'):
+        try:
+            end_time = datetime.now()
+            response_time_ms = int((end_time - request._start_time).total_seconds() * 1000)
+            
+            log_request(
+                endpoint=request._log_data['endpoint'],
+                method=request._log_data['method'],
+                ip_address=request._log_data['ip_address'],
+                user_agent=request._log_data['user_agent'],
+                request_params=request._log_data['request_params'],
+                response_time_ms=response_time_ms,
+                status_code=response.status_code
+            )
+        except Exception as e:
+            # 日志记录失败不影响正常请求
+            print(f"请求日志记录失败: {e}")
+    
+    return response
+IP_INFO_TIMEOUT = 3
+IP_INFO_ERROR_TTL_DAYS = 30
+IP_INFO_CACHE_TTL_DAYS = 30
 _ip_info_db_lock = Lock()
+_ip_api_order_lock = Lock()
+_ip_api_rotate_seed = random.randint(0, 999999)
 
 
 def _is_valid_ipv4(ip):
@@ -291,7 +334,7 @@ def _load_ip_info_apis():
         "vore": _parse_vore,
         "geojs": _parse_generic
     }
-    path = os.path.join(os.path.dirname(__file__), 'ip_info_apis.json')
+    path = os.path.join(os.path.dirname(__file__), 'config', 'ip_info_apis.json')
     apis = []
     try:
         if os.path.exists(path):
@@ -321,6 +364,23 @@ def _load_ip_info_apis():
 
 
 IP_INFO_APIS = _load_ip_info_apis()
+
+
+def _get_ordered_ip_info_apis():
+    apis = list(IP_INFO_APIS)
+    if len(apis) <= 1:
+        return apis
+    with _ip_api_order_lock:
+        global _ip_api_rotate_seed
+        _ip_api_rotate_seed = (_ip_api_rotate_seed + 1) % len(apis)
+        rotate_index = (_ip_api_rotate_seed + random.randint(0, len(apis) - 1)) % len(apis)
+    ordered = apis[rotate_index:] + apis[:rotate_index]
+    if len(ordered) > 2:
+        head = ordered[:2]
+        tail = ordered[2:]
+        random.shuffle(tail)
+        ordered = head + tail
+    return ordered
 
 
 def _safe_json_loads(text):
@@ -361,7 +421,15 @@ def _request_json(url):
 def _fetch_ip_info(ip):
     last_error = None
     last_meta = None
-    for api in IP_INFO_APIS:
+    # 限制尝试次数，防止超时
+    max_retries = 3
+    tried_count = 0
+    
+    for api in _get_ordered_ip_info_apis():
+        if tried_count >= max_retries:
+            break
+        tried_count += 1
+        
         url = api['url'].format(ip=ip)
         payload, _ = _request_json(url)
         if payload is None:
@@ -370,7 +438,7 @@ def _fetch_ip_info(ip):
         meta = {
             "_raw": payload,
             "_source_url": url,
-            "_fetched_at": datetime.now().strftime('%H:%M:%S')
+            "_fetched_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         if info and not info.get("error"):
             info.update(meta)
@@ -396,27 +464,34 @@ def query_dns_route():
         data = request.get_json()
         domains = data.get('domains', [])
         dns_servers_with_labels = data.get('dns_servers') or load_dns_config()
-
-        # query_domains 现在返回 (results, duration_seconds)
-        results, duration_seconds = query_domains(domains, dns_servers_with_labels)
         
-        # 保存历史记录，包含耗时信息
-        add_dns_history(domains, dns_servers_with_labels, results, duration_seconds)
+        from utils.query_service import start_query_task
+        
+        # 启动后台查询任务
+        start_query_task(domains, dns_servers_with_labels)
 
-        # 返回结果和统计信息
+        # 立即返回，告知前端查询已启动
         return jsonify({
-            'results': results,
-            'stats': {
-                'domain_count': len(domains),
-                'dns_server_count': len(dns_servers_with_labels),
-                'duration_seconds': round(duration_seconds, 2)
-            }
+            'status': 'started',
+            'message': '查询任务已在后台启动'
         })
     except SystemExit:
         mark_error()
         return jsonify({"error": "查询已中断"}), 200
     except Exception as e:
         mark_error()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_last_query_result', methods=['GET'])
+def get_last_query_result_route():
+    """获取最后一次查询的结果。"""
+    try:
+        from utils.query_service import get_last_result
+        result = get_last_result()
+        if result:
+            return jsonify(result)
+        return jsonify({"error": "暂无结果"}), 404
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
@@ -430,6 +505,7 @@ def query_ip_info_route():
             return jsonify({"error": "参数格式错误"}), 400
 
         with _ip_info_db_lock:
+            delete_expired_ip_info_cache(IP_INFO_CACHE_TTL_DAYS)
             delete_expired_ip_info_errors(IP_INFO_ERROR_TTL_DAYS)
 
         results = {}
@@ -483,6 +559,163 @@ def set_ip_info_error_ttl_route():
             return jsonify({"error": "天数必须大于0"}), 400
         IP_INFO_ERROR_TTL_DAYS = days
         return jsonify({"days": IP_INFO_ERROR_TTL_DAYS})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/get_ip_info_apis', methods=['GET'])
+def get_ip_info_apis_route():
+    """获取归属地查询API列表。"""
+    try:
+        apis = []
+        for api in IP_INFO_APIS:
+            apis.append({
+                "name": api["name"],
+                "url": api["url"],
+                "parser": api["parser"].__name__
+            })
+        return jsonify({"apis": apis})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/check_ip_info_api_status', methods=['POST'])
+def check_ip_info_api_status_route():
+    """检查指定归属地查询API的状态。"""
+    try:
+        data = request.get_json() or {}
+        api_name = data.get('api_name')
+        test_ip = data.get('test_ip', '8.8.8.8')
+        
+        if not api_name:
+            return jsonify({"error": "API名称不能为空"}), 400
+        
+        # 查找对应的API
+        target_api = None
+        for api in IP_INFO_APIS:
+            if api["name"] == api_name:
+                target_api = api
+                break
+        
+        if not target_api:
+            return jsonify({"error": f"未找到API: {api_name}"}), 404
+        
+        # 测试API
+        url = target_api['url'].format(ip=test_ip)
+        start_time = datetime.now()
+        payload, raw_text = _request_json(url)
+        elapsed = (datetime.now() - start_time).total_seconds()
+        
+        if payload is None:
+            return jsonify({
+                "api_name": api_name,
+                "status": "unavailable",
+                "message": "请求失败或超时",
+                "response_time": elapsed
+            })
+        
+        # 尝试解析
+        info = target_api['parser'](payload)
+        if info and not info.get("error"):
+            return jsonify({
+                "api_name": api_name,
+                "status": "available",
+                "message": "API可用",
+                "response_time": elapsed,
+                "sample_data": info
+            })
+        else:
+            return jsonify({
+                "api_name": api_name,
+                "status": "error",
+                "message": info.get("error", "解析失败") if info else "解析失败",
+                "response_time": elapsed
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/check_all_ip_info_apis', methods=['POST'])
+def check_all_ip_info_apis_route():
+    """检查所有归属地查询API的状态。"""
+    try:
+        data = request.get_json() or {}
+        test_ip = data.get('test_ip', '8.8.8.8')
+        results = []
+        
+        for api in IP_INFO_APIS:
+            url = api['url'].format(ip=test_ip)
+            start_time = datetime.now()
+            payload, raw_text = _request_json(url)
+            elapsed = (datetime.now() - start_time).total_seconds()
+            
+            status_info = {
+                "api_name": api["name"],
+                "url": api["url"],
+                "response_time": round(elapsed, 3)
+            }
+            
+            if payload is None:
+                status_info["status"] = "unavailable"
+                status_info["message"] = "请求失败或超时"
+            else:
+                info = api['parser'](payload)
+                if info and not info.get("error"):
+                    status_info["status"] = "available"
+                    status_info["message"] = "API可用"
+                else:
+                    status_info["status"] = "error"
+                    status_info["message"] = info.get("error", "解析失败") if info else "解析失败"
+            
+            results.append(status_info)
+        
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/save_ip_info_apis', methods=['POST'])
+def save_ip_info_apis_route():
+    """保存归属地查询API配置。"""
+    try:
+        data = request.get_json() or {}
+        apis = data.get('apis', [])
+        
+        if not apis:
+            return jsonify({"error": "API列表不能为空"}), 400
+        
+        # 验证每个API配置
+        valid_apis = []
+        for api in apis:
+            if not isinstance(api, dict):
+                continue
+            name = api.get('name')
+            url = api.get('url')
+            if not name or not url:
+                continue
+            valid_apis.append({
+                "name": name,
+                "url": url,
+                "parser": api.get('parser', 'generic')
+            })
+        
+        if not valid_apis:
+            return jsonify({"error": "没有有效的API配置"}), 400
+        
+        # 保存到配置文件
+        config_path = os.path.join(os.path.dirname(__file__), 'config', 'ip_info_apis.json')
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(valid_apis, f, ensure_ascii=False, indent=2)
+        
+        # 重新加载API配置
+        global IP_INFO_APIS
+        IP_INFO_APIS = _load_ip_info_apis()
+        
+        return jsonify({
+            "message": "API配置保存成功",
+            "apis": valid_apis
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -632,6 +865,362 @@ def clear_dns_cache_route():
             "success": False,
             "message": f"清理DNS缓存失败: {str(e)}"
         }), 500
+
+
+# ==================== 管理后台 API 路由 ====================
+
+from utils.system_config_service import get_all_config, get_config, set_config, set_config_batch, reset_to_defaults
+from utils.request_stats_service import get_daily_stats, get_type_stats, get_hourly_stats, get_summary_stats, get_top_slow_requests, get_error_requests, get_ip_stats, get_ip_detail_stats
+from utils.database_service import get_all_queries, get_query_by_id
+
+
+@app.route('/admin')
+def admin_dashboard():
+    """管理后台页面。"""
+    return render_template('admin.html')
+
+
+# --- 统计仪表盘 API ---
+
+@app.route('/api/admin/stats/daily')
+def admin_stats_daily():
+    """获取每日请求数统计。"""
+    try:
+        start = request.args.get('start', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
+        end = request.args.get('end', datetime.now().strftime('%Y-%m-%d'))
+        
+        data = get_daily_stats(start, end)
+        return jsonify({
+            'data': data,
+            'meta': {'start': start, 'end': end, 'total': len(data)}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stats/types')
+def admin_stats_types():
+    """获取请求类型分布。"""
+    try:
+        start = request.args.get('start', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
+        end = request.args.get('end', datetime.now().strftime('%Y-%m-%d'))
+        
+        data = get_type_stats(start, end)
+        return jsonify({
+            'data': data,
+            'meta': {'start': start, 'end': end, 'total': sum(data.values())}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stats/hourly')
+def admin_stats_hourly():
+    """获取某天的每小时请求数统计。"""
+    try:
+        date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+        
+        data = get_hourly_stats(date)
+        return jsonify({
+            'data': data,
+            'meta': {'date': date, 'total': sum(item['count'] for item in data)}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stats/summary')
+def admin_stats_summary():
+    """获取汇总统计信息。"""
+    try:
+        start = request.args.get('start', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
+        end = request.args.get('end', datetime.now().strftime('%Y-%m-%d'))
+        
+        data = get_summary_stats(start, end)
+        return jsonify({'data': data})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stats/slow')
+def admin_stats_slow():
+    """获取最慢的N个请求。"""
+    try:
+        limit = int(request.args.get('limit', 10))
+        data = get_top_slow_requests(limit)
+        return jsonify({'data': data})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stats/errors')
+def admin_stats_errors():
+    """获取错误请求列表。"""
+    try:
+        start = request.args.get('start', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
+        end = request.args.get('end', datetime.now().strftime('%Y-%m-%d'))
+        
+        data = get_error_requests(start, end)
+        return jsonify({
+            'data': data,
+            'meta': {'start': start, 'end': end, 'total': len(data)}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stats/by-ip')
+def admin_stats_by_ip():
+    """按IP汇总统计请求来源。"""
+    try:
+        start = request.args.get('start', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
+        end = request.args.get('end', datetime.now().strftime('%Y-%m-%d'))
+        
+        data = get_ip_stats(start, end)
+        return jsonify({
+            'data': data,
+            'meta': {'start': start, 'end': end, 'total': len(data)}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stats/by-ip-detail')
+def admin_stats_by_ip_detail():
+    """获取指定IP的详细请求记录。"""
+    try:
+        ip = request.args.get('ip')
+        if not ip:
+            return jsonify({'error': 'IP parameter is required'}), 400
+        
+        start = request.args.get('start', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
+        end = request.args.get('end', datetime.now().strftime('%Y-%m-%d'))
+        
+        data = get_ip_detail_stats(ip, start, end)
+        return jsonify({
+            'data': data,
+            'meta': {'ip': ip, 'start': start, 'end': end, 'total': len(data)}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- 配置管理 API ---
+
+@app.route('/api/admin/system-config', methods=['GET'])
+def admin_get_system_config():
+    """获取所有系统参数。"""
+    try:
+        config = get_all_config()
+        return jsonify({'config': config})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/system-config', methods=['PUT'])
+def admin_update_system_config():
+    """批量更新系统参数。"""
+    try:
+        data = request.get_json()
+        configs = data.get('configs', {})
+        
+        if not configs:
+            return jsonify({'error': 'No configs provided'}), 400
+        
+        success = set_config_batch(configs)
+        if success:
+            return jsonify({'message': 'Config updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update config'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/system-config/reset', methods=['POST'])
+def admin_reset_system_config():
+    """恢复系统参数到默认值。"""
+    try:
+        success = reset_to_defaults()
+        if success:
+            return jsonify({'message': 'Config reset to defaults'})
+        else:
+            return jsonify({'error': 'Failed to reset config'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/dns-config', methods=['GET'])
+def admin_get_dns_config():
+    """获取DNS配置。"""
+    try:
+        config = load_dns_config()
+        return jsonify({'config': config})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/dns-config', methods=['PUT'])
+def admin_update_dns_config():
+    """更新DNS配置。"""
+    try:
+        data = request.get_json()
+        servers = data.get('servers', [])
+        
+        if not servers:
+            return jsonify({'error': 'No servers provided'}), 400
+        
+        success = save_dns_config(servers)
+        if success:
+            return jsonify({'message': 'DNS config updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update DNS config'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ip-apis', methods=['GET'])
+def admin_get_ip_apis():
+    """获取IP归属地API列表。"""
+    try:
+        with open('config/ip_info_apis.json', 'r', encoding='utf-8') as f:
+            apis = json.load(f)
+        return jsonify({'apis': apis})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ip-apis', methods=['PUT'])
+def admin_update_ip_apis():
+    """更新IP归属地API列表。"""
+    try:
+        data = request.get_json()
+        apis = data.get('apis', [])
+        
+        if not isinstance(apis, list):
+            return jsonify({'error': 'Invalid apis format'}), 400
+        
+        with open('config/ip_info_apis.json', 'w', encoding='utf-8') as f:
+            json.dump(apis, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({'message': 'IP APIs updated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- 历史对比 API ---
+
+@app.route('/api/admin/history/list')
+def admin_history_list():
+    """获取查询记录列表。"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        date = request.args.get('date')
+        
+        queries = get_all_queries(limit)
+        
+        # 如果指定了日期，过滤
+        if date:
+            queries = [q for q in queries if q.get('date') == date]
+        
+        return jsonify({
+            'history': queries,
+            'total': len(queries)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/history/compare')
+def admin_history_compare():
+    """对比两次查询的结果差异。"""
+    try:
+        from_id = request.args.get('from_id')
+        to_id = request.args.get('to_id')
+        
+        if not from_id or not to_id:
+            return jsonify({'error': 'from_id and to_id are required'}), 400
+        
+        from_query = get_query_by_id(from_id)
+        to_query = get_query_by_id(to_id)
+        
+        if not from_query or not to_query:
+            return jsonify({'error': 'Query not found'}), 404
+        
+        # 对比逻辑
+        from_results = from_query.get('results', {})
+        to_results = to_query.get('results', {})
+        
+        added = []
+        removed = []
+        changed = []
+        
+        # 找出新增和变更的域名
+        for domain, to_data in to_results.items():
+            if domain not in from_results:
+                added.append({'domain': domain, 'result': to_data})
+            else:
+                from_data = from_results[domain]
+                if from_data != to_data:
+                    changed.append({
+                        'domain': domain,
+                        'from': from_data,
+                        'to': to_data
+                    })
+        
+        # 找出删除的域名
+        for domain, from_data in from_results.items():
+            if domain not in to_results:
+                removed.append({'domain': domain, 'result': from_data})
+        
+        return jsonify({
+            'comparison': {
+                'added': added,
+                'removed': removed,
+                'changed': changed
+            },
+            'from': {'id': from_id, 'timestamp': from_query.get('timestamp')},
+            'to': {'id': to_id, 'timestamp': to_query.get('timestamp')}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/history/dns-compare')
+def admin_history_dns_compare():
+    """同一查询中不同DNS服务器的结果对比。"""
+    try:
+        query_id = request.args.get('query_id')
+        domain = request.args.get('domain')
+        
+        if not query_id or not domain:
+            return jsonify({'error': 'query_id and domain are required'}), 400
+        
+        query = get_query_by_id(query_id)
+        if not query:
+            return jsonify({'error': 'Query not found'}), 404
+        
+        results = query.get('results', {})
+        domain_results = results.get(domain, {})
+        
+        # 按DNS服务器组织结果
+        dns_servers = query.get('dns_servers', [])
+        comparison = []
+        
+        for server in dns_servers:
+            server_result = domain_results.get(server, {})
+            comparison.append({
+                'dns_server': server,
+                'result': server_result,
+                'ips': server_result.get('ips', []) if isinstance(server_result, dict) else []
+            })
+        
+        return jsonify({
+            'domain': domain,
+            'query_id': query_id,
+            'comparison': comparison
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # 优雅处理Gunicorn的SIGTERM信号

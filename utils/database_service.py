@@ -91,6 +91,77 @@ def init_database():
         CREATE INDEX IF NOT EXISTS idx_ip_info_has_error
         ON ip_info_cache(has_error)
     ''')
+
+    # 创建请求日志表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS request_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            endpoint TEXT NOT NULL,
+            method TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            request_params TEXT,
+            response_time_ms INTEGER,
+            status_code INTEGER,
+            timestamp TEXT NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL
+        )
+    ''')
+
+    # 创建系统配置表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS system_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            config_key TEXT UNIQUE NOT NULL,
+            config_value TEXT NOT NULL,
+            description TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 为 request_logs 创建索引
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp 
+        ON request_logs(timestamp DESC)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_request_logs_date 
+        ON request_logs(date)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_request_logs_endpoint 
+        ON request_logs(endpoint)
+    ''')
+
+    # 为 system_config 创建索引
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_system_config_key 
+        ON system_config(config_key)
+    ''')
+
+    # 插入系统配置默认值
+    default_configs = [
+        ('cache_ttl_days', '30', 'IP信息缓存过期天数'),
+        ('error_cache_ttl_days', '30', 'IP信息错误缓存过期天数'),
+        ('dns_query_timeout', '5', 'DNS查询超时时间(秒)'),
+        ('api_request_timeout', '3', 'API请求超时时间(秒)'),
+        ('gunicorn_workers', str(min((os.cpu_count() or 1) * 2 + 1, 8)), 'Gunicorn工作进程数'),
+        ('gunicorn_port', '8000', 'Gunicorn监听端口'),
+        ('gunicorn_timeout', '120', 'Gunicorn请求超时时间(秒)'),
+        ('gunicorn_graceful_timeout', '30', 'Gunicorn优雅关闭超时时间(秒)'),
+        ('rate_limit_per_minute', '60', '每分钟请求速率限制'),
+        ('log_level', 'info', '日志级别'),
+        ('log_file', '-', '日志文件路径(-表示标准输出)')
+    ]
+    
+    for config_key, config_value, description in default_configs:
+        cursor.execute('''
+            INSERT OR IGNORE INTO system_config (config_key, config_value, description)
+            VALUES (?, ?, ?)
+        ''', (config_key, config_value, description))
     
     conn.commit()
     conn.close()
@@ -164,6 +235,23 @@ def delete_expired_ip_info_errors(days: int) -> bool:
         return True
     except Exception as e:
         print(f"清理过期IP错误缓存失败: {e}")
+        return False
+
+
+def delete_expired_ip_info_cache(days: int) -> bool:
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute(
+            'DELETE FROM ip_info_cache WHERE updated_at < datetime("now", ?)',
+            (f'-{days} days',)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"清理过期IP缓存失败: {e}")
         return False
 
 

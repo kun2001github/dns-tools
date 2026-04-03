@@ -14,6 +14,7 @@ function isLikelyIPv4(value) { return window.DNSUtils.isLikelyIPv4(value); }
 function isARecordNonCopyable(value) { return window.DNSUtils.isARecordNonCopyable(value); }
 function copyToClipboard(text, event) { return window.DNSUtils.copyToClipboard(text, event); }
 function addDNS(dnsServer) { return window.DNSUtils.addDNS(dnsServer); }
+function toggleDnsDropdown() { return window.DNSUtils.toggleDnsDropdown(); }
 
 // Format模块
 function normalizeDomain(domain) { return window.DomainFormatter.normalizeDomain(domain); }
@@ -48,6 +49,15 @@ function loadDNSConfig() { return window.QueryManager.loadDNSConfig(); }
 function saveDNSConfig() { return window.QueryManager.saveDNSConfig(); }
 function queryDNS() { return window.QueryManager.queryDNS(); }
 function clearDNSCache() { return window.QueryManager.clearDNSCache(); }
+function loadIpInfoApis() { return window.QueryManager.loadIpInfoApis(); }
+function checkIpInfoApi(apiName, index) { return window.QueryManager.checkIpInfoApi(apiName, index); }
+function checkAllIpInfoApis() { return window.QueryManager.checkAllIpInfoApis(); }
+function saveIpInfoApis() { return window.QueryManager.saveIpInfoApis(); }
+function toggleIpApiDropdown() { return window.QueryManager.toggleIpApiDropdown(); }
+function showAddApiForm() { return window.QueryManager.showAddApiForm(); }
+function hideAddApiForm() { return window.QueryManager.hideAddApiForm(); }
+function addNewApi() { return window.QueryManager.addNewApi(); }
+function deleteIpApi(index) { return window.QueryManager.deleteIpApi(index); }
 
 // ============================================
 // 应用初始化

@@ -387,16 +387,19 @@ textarea:focus {
 }
 
 .ip-info-tags {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 4px;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
     margin-right: 6px;
+    max-width: 100%;
 }
 
 .ip-info-tag {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    margin-right: 4px;
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.65rem;
@@ -406,7 +409,7 @@ textarea:focus {
     white-space: nowrap;
     max-width: 180px;
     overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
 }
 
 .ip-info-tag.isp {
@@ -424,11 +427,6 @@ textarea:focus {
     color: #fcd34d;
 }
 
-.ip-info-tag.type {
-    background: rgba(168, 85, 247, 0.16);
-    color: #d8b4fe;
-}
-
 .ip-info-tag.loading {
     background: rgba(148, 163, 184, 0.12);
     color: var(--text-dim);
@@ -439,7 +437,28 @@ textarea:focus {
     color: #fca5a5;
 }
 
-/* IP 详情悬浮框 - 优化交互和显示效果 */
+/* ==========================================
+   IP 详情窗口样式配置
+   修改以下变量即可调整整体外观
+   ========================================== */
+:root {
+    /* 尺寸配置 */
+    --ip-detail-min-width: 520px;      /* 最小宽度 */
+    --ip-detail-max-width: 92vw;       /* 最大宽度 */
+    --ip-detail-padding: 20px;         /* 内边距 */
+    --ip-detail-gap: 16px;             /* 分栏间距 */
+    
+    /* 字体配置 */
+    --ip-detail-font-size: 0.85rem;    /* 基础字号 */
+    --ip-detail-label-color: #94a3b8;  /* 标签颜色 */
+    --ip-detail-value-color: #f1f5f9;  /* 值颜色 */
+    
+    /* 分栏配置 */
+    --ip-detail-left-width: fit-content;  /* 左栏宽度：fit-content 或具体值如 320px */
+    --ip-detail-right-width: 280px;       /* 右栏宽度 */
+}
+
+/* IP 详情悬浮框容器 */
 .ip-info-detail {
     position: absolute;
     display: none;
@@ -449,16 +468,15 @@ textarea:focus {
     padding: 0;
     background: transparent;
     border: none;
-    border-radius: 16px;
-    font-size: 0.75rem;
-    z-index: 1000;
-    box-shadow: none;
-    backdrop-filter: none;
-    animation: tooltipFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    width: clamp(240px, 90vw, 520px);
-    max-width: 90vw;
+    border-radius: 12px;
+    font-size: var(--ip-detail-font-size);
+    z-index: 200000;
+    animation: tooltipFadeIn 0.3s ease-out;
+    width: fit-content;
+    min-width: var(--ip-detail-min-width);
+    max-width: var(--ip-detail-max-width);
     opacity: 0;
-    transform: translateY(-10px) scale(0.95);
+    transform: translateY(-8px);
     pointer-events: none;
 }
 
@@ -467,7 +485,7 @@ textarea:focus {
     content: '';
     position: absolute;
     top: -6px;
-    left: 20px;
+    left: var(--arrow-left, 20px);
     width: 12px;
     height: 12px;
     background: var(--card-bg);
@@ -477,6 +495,7 @@ textarea:focus {
     transform: rotate(45deg);
     z-index: -1;
     filter: drop-shadow(0 -2px 4px rgba(0, 0, 0, 0.1));
+    transition: left 0.2s ease;
 }
 
 /* 弹窗内部内容 */
@@ -632,16 +651,158 @@ textarea:focus {
     line-height: 1.5;
 }
 
-.ip-info-detail-meta {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(56, 189, 248, 0.2);
+.ip-info-detail-compact {
+    padding: var(--ip-detail-padding) !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+.ip-info-detail-columns {
+    display: flex;
+    gap: var(--ip-detail-gap);
+}
+
+.ip-info-detail-left {
+    display: flex;
+    flex-direction: column;
+    width: var(--ip-detail-left-width);
+    flex-shrink: 0;
+}
+
+.ip-info-detail-right {
+    display: flex;
+    flex-direction: column;
+    width: var(--ip-detail-right-width);
+    flex-shrink: 0;
+}
+
+.ip-info-source {
+    font-size: 0.75rem;
+    color: var(--ip-detail-label-color);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.ip-info-source-domain {
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+.ip-info-detail-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ip-info-detail-row {
+    display: flex;
+    align-items: center;
+    font-size: var(--ip-detail-font-size);
+    white-space: nowrap;
+}
+
+.ip-info-row-url {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ip-info-copy-btn {
+    padding: 4px 10px;
     font-size: 0.7rem;
-    color: var(--text-dim);
-    line-height: 1.5;
-    background: rgba(56, 189, 248, 0.02);
-    border-radius: 8px;
+    border-radius: 4px;
+    border: 1px solid var(--accent-color);
+    background: transparent;
+    color: var(--accent-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.ip-info-copy-btn:hover {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--text-main);
+}
+
+.ip-info-row-pair {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.ip-info-pair {
+    display: flex;
+    align-items: center;
+}
+
+.ip-info-divider {
+    color: var(--ip-detail-label-color);
+    margin: 0 16px;
+    font-weight: 300;
+}
+
+.ip-info-label {
+    color: var(--ip-detail-label-color);
+    font-weight: 500;
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.ip-info-value {
+    color: var(--ip-detail-value-color);
+    font-weight: 600;
+}
+
+.ip-info-url {
+    font-size: calc(var(--ip-detail-font-size) - 0.05rem);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+}
+
+.ip-info-url:hover {
+    color: var(--accent-color);
+    text-decoration-style: solid;
+}
+
+.ip-info-row-time {
+    margin-top: 4px;
+}
+
+.ip-info-requery-btn {
+    padding: 6px 14px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--accent-color);
+    background: transparent;
+    color: var(--accent-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.ip-info-requery-btn:hover {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--text-main);
+}
+
+.ip-info-detail-compact .ip-info-detail-raw {
+    margin: 0;
     padding: 12px;
+    height: 100%;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.ip-info-detail-compact .ip-info-detail-raw pre {
+    font-size: 0.75rem;
+    line-height: 1.5;
 }
 
 .ip-info-detail-actions {
@@ -721,7 +882,6 @@ textarea:focus {
     color: #e2e8f0;
 }
 
-/* A记录容器悬停效果 */
 .a-record-container {
     cursor: pointer;
     transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
@@ -733,36 +893,26 @@ textarea:focus {
 }
 
 .a-record-container:hover {
-    background: none;
-    border-color: transparent;
-    transform: none;
-    box-shadow: none;
-}
-
-/* 悬浮时显示IP详情 - 优化交互 */
-.a-record-container:hover .ip-info-detail,
-.ip-info-detail:hover {
-    display: block;
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0) scale(1);
-}
-
-/* 弹窗显示时保持触发器高亮 */
-.a-record-container:hover {
     background: rgba(56, 189, 248, 0.05);
     border-color: rgba(56, 189, 248, 0.2);
 }
 
-/* 添加延迟隐藏效果 */
 .ip-info-detail {
     transition: opacity 0.3s ease, transform 0.3s ease, pointer-events 0.3s ease;
+}
+
+.ip-info-detail-visible {
+    display: block;
 }
 
 .a-record-highlight {
     background: rgba(56, 189, 248, 0.16) !important;
     border-color: rgba(56, 189, 248, 0.35) !important;
     box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.12);
+}
+
+.a-record-active {
+    z-index: 120000;
 }
 
 /* 服务器块悬停效果 */
@@ -1229,7 +1379,30 @@ textarea:focus {
     font-family: 'JetBrains Mono', monospace;
 }
 
+/* DNS快速添加按钮 - 玻璃质感药丸标签 */
+.dns-quick-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
 
+.dns-quick-btn:hover {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.15), inset 0 0 8px rgba(56, 189, 248, 0.05);
+    transform: translateY(-1px);
+}
 
-
-
+.dns-quick-btn:active {
+    transform: translateY(0) scale(0.97);
+    background: rgba(56, 189, 248, 0.15);
+}

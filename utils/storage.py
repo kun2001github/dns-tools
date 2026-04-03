@@ -2,7 +2,8 @@
 import json
 import os
 
-DNS_CONFIG_FILE = 'config.json'
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+DNS_CONFIG_FILE = os.path.join(BASE_DIR, 'config', 'config.json')
 HISTORY_FILE = os.path.join('history', 'dns_history.json')
 DEFAULT_DNS_SERVERS = [
     '202.96.128.166 # 电信DNS',
@@ -27,6 +28,7 @@ def save_dns_config(dns_servers):
     """保存DNS服务器配置（带标签）。"""
     try:
         config = {'dns_servers': dns_servers}
+        os.makedirs(os.path.dirname(DNS_CONFIG_FILE), exist_ok=True)
         with open(DNS_CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
         return True

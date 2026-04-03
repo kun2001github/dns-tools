@@ -76,6 +76,7 @@ function formatARecordDisplay(rawValue, consistency) {
 const ipInfoCache = new Map();
 let ipInfoRequestId = 0;
 let ipInfoRequeryBound = false;
+const ipDetailOutsideCloseBoundScopes = new WeakSet();
 
 function toAlphaColor(color, alpha) {
     if (!color) return '';
@@ -150,13 +151,6 @@ function buildIpInfoTagsHtml(container, ip, info) {
         }
 
         const tags = [];
-        if (info.isp) {
-            const tag = document.createElement('span');
-            tag.className = 'ip-info-tag isp';
-            tag.textContent = `运营商:${info.isp}`;
-            tag.title = tag.textContent;
-            tags.push(tag);
-        }
         if (info.country) {
             const tag = document.createElement('span');
             tag.className = 'ip-info-tag country';
@@ -169,13 +163,6 @@ function buildIpInfoTagsHtml(container, ip, info) {
             const tag = document.createElement('span');
             tag.className = 'ip-info-tag region';
             tag.textContent = `地区:${regionParts.join(' ')}`;
-            tag.title = tag.textContent;
-            tags.push(tag);
-        }
-        if (info.ip_type) {
-            const tag = document.createElement('span');
-            tag.className = 'ip-info-tag type';
-            tag.textContent = `类型:${info.ip_type}`;
             tag.title = tag.textContent;
             tags.push(tag);
         }
@@ -203,39 +190,75 @@ function buildIpInfoDetailHtml(container, ip, info) {
     const country = info && info.country ? info.country : '';
     const region = info && info.region ? info.region : '';
     const city = info && info.city ? info.city : '';
-    const ipType = info && info.ip_type ? info.ip_type : '';
     const rawText = info ? stringifyRaw(info._raw) : '';
     const urlText = info && info._source_url ? info._source_url : '';
     const timeText = info && info._fetched_at ? formatDateTime(info._fetched_at) : '';
     const errorText = info && info.error ? info.error : '';
+    
+    // 从URL中提取域名
+    let domain = '';
+    if (urlText) {
+        try {
+            const url = new URL(urlText);
+            domain = url.hostname;
+        } catch (e) {
+            domain = urlText;
+        }
+    }
 
     const detailHtml = info
         ? `
-            <div class="ip-info-detail-content">
-                <div class="ip-info-detail-title">${errorText ? 'IP详情（查询失败）' : 'IP详情'}</div>
-                ${errorText ? `<div class="ip-info-detail-error">错误信息：${escapeHtml(errorText)}</div>` : ''}
-                <div class="ip-info-detail-raw">
-                    <pre>${escapeHtml(rawText || '无')}</pre>
-                </div>
-                <div class="ip-info-detail-meta">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span>请求URL：</span>
-                        <span style="flex: 1; word-break: break-all;">${escapeHtml(urlText || '无')}</span>
-                        ${urlText ? `<button class="btn btn-outline" onclick="window.DNSUtils.copyToClipboard('${escapeHtml(urlText)}', event)" style="padding: 2px 8px; font-size: 0.7rem; min-width: auto;" title="点击复制URL">复制</button>` : ''}
+            <div class="ip-info-detail-content ip-info-detail-compact">
+                <div class="ip-info-detail-columns">
+                    <div class="ip-info-detail-left">
+                        ${domain ? `<div class="ip-info-source">信息来源于 <span class="ip-info-source-domain">${escapeHtml(domain)}</span> 'API'</div>` : ''}
+                        <div class="ip-info-detail-rows">
+                            <div class="ip-info-detail-row ip-info-row-pair">
+                                <div class="ip-info-pair">
+                                    <span class="ip-info-label">ISP：</span>
+                                    <span class="ip-info-value">${escapeHtml(isp || '未知')}</span>
+                                </div>
+                                <span class="ip-info-divider">｜</span>
+                                <div class="ip-info-pair">
+                                    <span class="ip-info-label">国家：</span>
+                                    <span class="ip-info-value">${escapeHtml(country || '未知')}</span>
+                                </div>
+                            </div>
+                            <div class="ip-info-detail-row ip-info-row-pair">
+                                <div class="ip-info-pair">
+                                    <span class="ip-info-label">地区：</span>
+                                    <span class="ip-info-value">${escapeHtml(region || '未知')}</span>
+                                </div>
+                                <span class="ip-info-divider">｜</span>
+                                <div class="ip-info-pair">
+                                    <span class="ip-info-label">城市：</span>
+                                    <span class="ip-info-value">${escapeHtml(city || '未知')}</span>
+                                </div>
+                            </div>
+                            <div class="ip-info-detail-row ip-info-row-url">
+                                <span class="ip-info-label">URL：</span>
+                                <span class="ip-info-value ip-info-url" ${urlText ? `data-copy-url="${escapeHtml(urlText)}" title="点击复制"` : ''}>${escapeHtml(urlText || '无')}</span>
+                            </div>
+                            <div class="ip-info-detail-row ip-info-row-time">
+                                <span class="ip-info-label">近期查询：</span>
+                                <span class="ip-info-value">${escapeHtml(timeText || '无')}</span>
+                                <button class="btn btn-outline ip-info-requery-btn" data-ip-requery="${escapeHtml(ip)}">更新查询</button>
+                            </div>
+                        </div>
                     </div>
-                    <div>查询时间：${escapeHtml(timeText || '无')}</div>
-                </div>
-                <div class="ip-info-detail-actions">
-                    <button class="btn btn-outline ip-info-requery-btn" data-ip-requery="${escapeHtml(ip)}">重新查询</button>
+                    <div class="ip-info-detail-right">
+                        <div class="ip-info-detail-raw">
+                            <pre>${escapeHtml(rawText || '无')}</pre>
+                        </div>
+                    </div>
                 </div>
             </div>
         `
         : `
-            <div class="ip-info-detail-content">
-                <div class="ip-info-detail-title">IP详情</div>
+            <div class="ip-info-detail-content ip-info-detail-compact">
                 <div class="ip-info-detail-empty">查询中...</div>
                 <div class="ip-info-detail-actions">
-                    <button class="btn btn-outline ip-info-requery-btn" data-ip-requery="${escapeHtml(ip)}">重新查询</button>
+                    <button class="btn btn-outline ip-info-requery-btn" data-ip-requery="${escapeHtml(ip)}">更新查询</button>
                 </div>
             </div>
         `;
@@ -341,144 +364,229 @@ function bindIpInfoRequery() {
     ipInfoRequeryBound = true;
 }
 
-/**
- * 绑定A记录悬停高亮和IP详情弹窗交互
- */
+function hideIpInfoDetail(tooltip) {
+    if (!tooltip) return;
+    if (tooltip.__hideTimer) {
+        clearTimeout(tooltip.__hideTimer);
+    }
+    tooltip.classList.remove('ip-info-detail-visible');
+    tooltip.style.opacity = '0';
+    tooltip.style.pointerEvents = 'none';
+    tooltip.style.transform = 'translateY(-10px) scale(0.95)';
+    tooltip.__hideTimer = setTimeout(() => {
+        if (!tooltip.classList.contains('ip-info-detail-visible')) {
+            tooltip.style.display = 'none';
+            tooltip.style.visibility = 'visible';
+        }
+        tooltip.__hideTimer = null;
+    }, 300);
+}
+
+function closeIpInfoDetails(scope) {
+    const root = scope || document;
+    root.querySelectorAll('.a-record-highlight').forEach(node => {
+        node.classList.remove('a-record-highlight');
+    });
+    root.querySelectorAll('.a-record-active').forEach(node => {
+        node.classList.remove('a-record-active');
+    });
+    root.querySelectorAll('.ip-info-detail').forEach(tooltip => {
+        hideIpInfoDetail(tooltip);
+    });
+}
+
+function showIpInfoDetail(trigger, tooltip, event) {
+    if (!trigger || !tooltip) return;
+    if (tooltip.__hideTimer) {
+        clearTimeout(tooltip.__hideTimer);
+        tooltip.__hideTimer = null;
+    }
+    tooltip.style.display = 'block';
+    tooltip.style.visibility = 'hidden';
+    tooltip.style.opacity = '0';
+    tooltip.style.pointerEvents = 'none';
+    tooltip.style.transform = 'translateY(-10px) scale(0.95)';
+
+    const detailContent = tooltip.querySelector('.ip-info-detail-content');
+    const maxWidth = Math.max(320, Math.min(960, window.innerWidth - 20));
+    tooltip.style.maxWidth = `${maxWidth}px`;
+
+    const rect = trigger.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    const useAbove = spaceAbove > spaceBelow;
+    if (useAbove) {
+        tooltip.style.top = 'auto';
+        tooltip.style.bottom = '100%';
+        tooltip.style.marginBottom = '8px';
+        tooltip.style.marginTop = '0';
+    } else {
+        tooltip.style.top = '100%';
+        tooltip.style.bottom = 'auto';
+        tooltip.style.marginTop = '8px';
+        tooltip.style.marginBottom = '0';
+    }
+
+    if (rect.left + tooltipRect.width > window.innerWidth) {
+        tooltip.style.left = 'auto';
+        tooltip.style.right = '0';
+    } else {
+        tooltip.style.left = '0';
+        tooltip.style.right = 'auto';
+    }
+
+    if (detailContent) {
+        const verticalSpace = useAbove ? spaceAbove : spaceBelow;
+        const maxHeight = Math.max(260, Math.min(window.innerHeight - 24, verticalSpace - 12));
+        detailContent.style.maxHeight = `${maxHeight}px`;
+        detailContent.style.overflow = 'auto';
+    }
+
+    tooltip.style.visibility = 'visible';
+    trigger.classList.add('a-record-active');
+    
+    // 动态设置箭头位置 - 在tooltip可见后计算
+    const updateArrowPosition = () => {
+        if (event) {
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const mouseX = event.clientX;
+            let arrowLeft = mouseX - tooltipRect.left - 6;
+            arrowLeft = Math.max(16, Math.min(arrowLeft, tooltipRect.width - 28));
+            tooltip.style.setProperty('--arrow-left', `${arrowLeft}px`);
+        }
+    };
+    
+    // 立即计算一次
+    updateArrowPosition();
+    
+    setTimeout(() => {
+        tooltip.classList.add('ip-info-detail-visible');
+        tooltip.style.opacity = '1';
+        tooltip.style.pointerEvents = 'auto';
+        tooltip.style.transform = 'translateY(0) scale(1)';
+        // 动画完成后再计算一次，确保位置准确
+        setTimeout(updateArrowPosition, 100);
+    }, 10);
+}
+
 function bindARecordHoverHighlight(root) {
     const scope = root || document;
     const items = scope.querySelectorAll('[data-a-ip]');
     if (!items.length) return;
 
-    const listByIp = new Map();
-    items.forEach(el => {
-        const ip = el.getAttribute('data-a-ip');
-        if (!ip) {
-            return;
-        }
-        if (!listByIp.has(ip)) listByIp.set(ip, []);
-        listByIp.get(ip).push(el);
-    });
-
-    const clearAll = () => {
-        listByIp.forEach(group => {
-            group.forEach(node => {
-                node.classList.remove('a-record-highlight');
-            });
+    const applyHoverHighlight = (ip) => {
+        if (!ip) return;
+        scope.querySelectorAll('.a-record-highlight').forEach(node => {
+            node.classList.remove('a-record-highlight');
+        });
+        const sameIpItems = scope.querySelectorAll(`[data-a-ip="${ip}"]`);
+        sameIpItems.forEach(node => {
+            node.classList.add('a-record-highlight');
         });
     };
 
-    // 存储定时器
-    const hideTimers = new Map();
+    const clearHoverHighlight = () => {
+        if (scope.querySelector('.ip-info-detail-visible')) return;
+        scope.querySelectorAll('.a-record-highlight').forEach(node => {
+            node.classList.remove('a-record-highlight');
+        });
+    };
 
     items.forEach(el => {
         const ip = el.getAttribute('data-a-ip');
-        if (!ip) {
-            return;
-        }
-        
         const tooltip = el.querySelector('.ip-info-detail');
-        if (!tooltip) return;
-
-        // 清除该IP的所有定时器
-        const clearTimer = () => {
-            const timer = hideTimers.get(ip);
-            if (timer) {
-                clearTimeout(timer);
-                hideTimers.delete(ip);
-            }
+        let closeTimer = null;
+        const clearCloseTimer = () => {
+            if (!closeTimer) return;
+            clearTimeout(closeTimer);
+            closeTimer = null;
         };
-
-        // 显示弹窗
-        const showTooltip = () => {
-            clearAll();
-            clearTimer();
-            const group = listByIp.get(ip);
-            if (group) {
-                group.forEach(node => {
-                    node.classList.add('a-record-highlight');
-                });
-            }
-
-            // 智能定位弹窗
-            tooltip.style.display = 'block';
-            tooltip.style.visibility = 'hidden';
-            tooltip.style.opacity = '0';
-            tooltip.style.pointerEvents = 'none';
-            tooltip.style.transform = 'translateY(-10px) scale(0.95)';
-
-            const detailContent = tooltip.querySelector('.ip-info-detail-content');
-            const maxWidth = Math.max(260, Math.min(520, window.innerWidth - 24));
-            tooltip.style.maxWidth = `${maxWidth}px`;
-
-            const rect = el.getBoundingClientRect();
-            let tooltipRect = tooltip.getBoundingClientRect();
-            const spaceBelow = window.innerHeight - rect.bottom;
-            const spaceAbove = rect.top;
-
-            const useAbove = spaceBelow < tooltipRect.height && spaceAbove > spaceBelow;
-            if (useAbove) {
-                tooltip.style.top = 'auto';
-                tooltip.style.bottom = '100%';
-                tooltip.style.marginBottom = '8px';
-                tooltip.style.marginTop = '0';
-            } else {
-                tooltip.style.top = '100%';
-                tooltip.style.bottom = 'auto';
-                tooltip.style.marginTop = '8px';
-                tooltip.style.marginBottom = '0';
-            }
-
-            if (rect.left + tooltipRect.width > window.innerWidth) {
-                tooltip.style.left = 'auto';
-                tooltip.style.right = '0';
-            } else {
-                tooltip.style.left = '0';
-                tooltip.style.right = 'auto';
-            }
-
-            if (detailContent) {
-                const verticalSpace = useAbove ? spaceAbove : spaceBelow;
-                const maxHeight = Math.max(220, Math.min(480, verticalSpace - 16));
-                detailContent.style.maxHeight = `${maxHeight}px`;
-                detailContent.style.overflow = 'auto';
-            }
-
-            tooltip.style.visibility = 'visible';
-            setTimeout(() => {
-                tooltip.style.opacity = '1';
-                tooltip.style.pointerEvents = 'auto';
-                tooltip.style.transform = 'translateY(0) scale(1)';
-            }, 10);
+        const scheduleClose = () => {
+            clearCloseTimer();
+            closeTimer = setTimeout(() => {
+                closeIpInfoDetails(scope);
+            }, 280);
         };
-
-        // 延迟隐藏弹窗
-        const hideTooltip = () => {
-            clearTimer();
-            const timer = setTimeout(() => {
-                tooltip.style.opacity = '0';
-                tooltip.style.pointerEvents = 'none';
-                tooltip.style.transform = 'translateY(-10px) scale(0.95)';
-                setTimeout(() => {
-                    tooltip.style.display = 'none';
-                }, 300);
-                clearAll();
-            }, 150); // 150ms延迟，给用户时间移动到弹窗
-            hideTimers.set(ip, timer);
-        };
-
-        el.addEventListener('mouseenter', showTooltip);
-        el.addEventListener('mouseleave', hideTooltip);
-
-        // 弹窗本身的交互
-        tooltip.addEventListener('mouseenter', clearTimer);
-        tooltip.addEventListener('mouseleave', hideTooltip);
-
-        // 点击弹窗内容时阻止隐藏
-        tooltip.addEventListener('click', (e) => {
-            e.stopPropagation();
-            clearTimer();
+        el.addEventListener('mouseenter', () => {
+            clearCloseTimer();
+            if (!ip) return;
+            if (scope.querySelector('.ip-info-detail-visible')) return;
+            applyHoverHighlight(ip);
         });
+        el.addEventListener('mouseleave', (event) => {
+            if (tooltip && tooltip.classList.contains('ip-info-detail-visible')) {
+                const related = event.relatedTarget;
+                if (related && (el.contains(related) || tooltip.contains(related))) {
+                    return;
+                }
+                scheduleClose();
+                return;
+            }
+            clearHoverHighlight();
+        });
+        let clickTimer = null;
+        const toggleDetail = (clickEvent) => {
+            if (!ip) return;
+            const sameIpItems = scope.querySelectorAll(`[data-a-ip="${ip}"]`);
+            const currentTooltip = el.querySelector(`[data-ip-detail="${ip}"]`);
+            if (currentTooltip && currentTooltip.classList.contains('ip-info-detail-visible')) {
+                closeIpInfoDetails(scope);
+                return;
+            }
+            closeIpInfoDetails(scope);
+            sameIpItems.forEach(node => {
+                node.classList.add('a-record-highlight');
+            });
+            showIpInfoDetail(el, currentTooltip, clickEvent);
+        };
+        el.addEventListener('click', (e) => {
+            if (!ip) return;
+            if (e.target.closest('.ip-info-detail')) return;
+            clearCloseTimer();
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+            }
+            clickTimer = setTimeout(() => {
+                toggleDetail(e);
+                clickTimer = null;
+            }, 220);
+        });
+        el.addEventListener('dblclick', (e) => {
+            if (!ip) return;
+            clearCloseTimer();
+            if (clickTimer) {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            window.DNSUtils.copyToClipboard(ip, e);
+        });
+        if (tooltip) {
+            tooltip.addEventListener('mouseenter', () => {
+                clearCloseTimer();
+            });
+            tooltip.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+            tooltip.addEventListener('mouseleave', (event) => {
+                if (!tooltip.classList.contains('ip-info-detail-visible')) return;
+                const related = event.relatedTarget;
+                if (related && el.contains(related)) return;
+                scheduleClose();
+            });
+        }
     });
+
+    if (!ipDetailOutsideCloseBoundScopes.has(scope)) {
+        document.addEventListener('click', (event) => {
+            if (event.target.closest('.ip-info-detail')) return;
+            closeIpInfoDetails(scope);
+        });
+        ipDetailOutsideCloseBoundScopes.add(scope);
+    }
 }
 
 /**
@@ -664,17 +772,17 @@ function renderHorizontalView(container, resultsData, domainsToRender, dnsServer
                         if (showInfo) {
                             shownIpInfo.add(display.copy);
                         }
-                        const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                        const interactionAttr = display.copyable ? 'title="单击查看详情，双击复制IP"' : '';
                         const containerClass = display.copyable ? 'a-record-container' : '';
                         const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
                         const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
                         const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
-                        const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                        const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
                         const tagsBlock = tagHtml ? `<div>${tagHtml}</div>` : '';
 
-                        dnsContent += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="margin-bottom: 4px;">
+                        dnsContent += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="margin-bottom: 4px;">
                             ${tagsBlock}
-                            <div>
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                 <span class="record-tag" style="font-size:0.6rem; padding:1px 6px;">A</span>
                                 <span style="${display.style}">${display.text}</span>
                             </div>
@@ -740,15 +848,15 @@ function renderCardView(container, resultsData, domainsToRender, dnsServers) {
                         if (showInfo) {
                             shownIpInfo.add(display.copy);
                         }
-                        const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                        const interactionAttr = display.copyable ? 'title="单击查看详情，双击复制IP"' : '';
                         const containerClass = display.copyable ? 'a-record-container' : '';
                         const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
                         const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
                         const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
-                        const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                        const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
                         const tagsBlock = tagHtml ? `<div style="margin-bottom: 4px;">${tagHtml}</div>` : '';
 
-                        html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="padding: 4px; border-radius: 4px;">
+                        html += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="padding: 4px; border-radius: 4px;">
                             ${tagsBlock}
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span class="record-tag">A</span>
@@ -802,6 +910,17 @@ function toggleViewMode() {
         renderResults(JSON.parse(currentResult), domainOrder);
     }
 }
+
+// URL点击复制事件委托
+document.addEventListener('click', function(e) {
+    const urlElement = e.target.closest('.ip-info-url[data-copy-url]');
+    if (urlElement) {
+        const url = urlElement.getAttribute('data-copy-url');
+        if (url) {
+            window.DNSUtils.copyToClipboard(url, e);
+        }
+    }
+});
 
 // 导出函数到全局作用域
 window.DisplayManager = {

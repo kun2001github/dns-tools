@@ -51,56 +51,90 @@ function isARecordNonCopyable(value) {
  * 复制到剪贴板
  */
 function copyToClipboard(text, event) {
-    navigator.clipboard.writeText(text).then(() => {
-        // 显示复制成功提示，在鼠标位置显示
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            background: var(--success-color);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            z-index: 1000;
-            font-size: 0.85rem;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            animation: fadeIn 0.3s ease-out;
-            white-space: nowrap;
-            pointer-events: none;
-        `;
-        notification.textContent = `✅ 已复制: ${text}`;
-        document.body.appendChild(notification);
+    // 尝试使用现代API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            showCopyNotification(text, event);
+        }).catch(err => {
+            console.warn('Clipboard API失败，尝试备用方法:', err);
+            fallbackCopy(text, event);
+        });
+    } else {
+        fallbackCopy(text, event);
+    }
+}
+
+/**
+ * 备用复制方法
+ */
+function fallbackCopy(text, event) {
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textarea);
         
-        // 获取鼠标位置
-        const mouseX = event ? event.clientX : window.innerWidth / 2;
-        const mouseY = event ? event.clientY : window.innerHeight / 2;
-        
-        // 设置提示框位置，确保不超出屏幕边界
-        const rect = notification.getBoundingClientRect();
-        let left = mouseX + 15;
-        let top = mouseY - rect.height - 10;
-        
-        // 防止超出右边界
-        if (left + rect.width > window.innerWidth - 10) {
-            left = mouseX - rect.width - 15;
+        if (successful) {
+            showCopyNotification(text, event);
+        } else {
+            alert('复制失败，请手动复制');
         }
-        
-        // 防止超出顶部边界
-        if (top < 10) {
-            top = mouseY + 15;
-        }
-        
-        notification.style.left = left + 'px';
-        notification.style.top = top + 'px';
-        
-        setTimeout(() => {
-            notification.style.animation = 'fadeOut 0.3s ease-out';
-            setTimeout(() => notification.remove(), 300);
-        }, 1500);
-    }).catch(err => {
-        console.error('复制失败:', err);
+    } catch (err) {
+        console.error('备用复制方法失败:', err);
         alert('复制失败，请手动复制');
-    });
+    }
+}
+
+/**
+ * 显示复制成功提示
+ */
+function showCopyNotification(text, event) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        background: var(--success-color);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 6px;
+        z-index: 1000;
+        font-size: 0.85rem;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        animation: fadeIn 0.3s ease-out;
+        white-space: nowrap;
+        pointer-events: none;
+    `;
+    notification.textContent = `已复制: ${text}`;
+    document.body.appendChild(notification);
+    
+    const mouseX = event ? event.clientX : window.innerWidth / 2;
+    const mouseY = event ? event.clientY : window.innerHeight / 2;
+    
+    const rect = notification.getBoundingClientRect();
+    let left = mouseX + 15;
+    let top = mouseY - rect.height - 10;
+    
+    if (left + rect.width > window.innerWidth - 10) {
+        left = mouseX - rect.width - 15;
+    }
+    
+    if (top < 10) {
+        top = mouseY + 15;
+    }
+    
+    notification.style.left = left + 'px';
+    notification.style.top = top + 'px';
+    
+    setTimeout(() => {
+        notification.style.animation = 'fadeOut 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+    }, 1500);
 }
 
 /**
@@ -123,6 +157,24 @@ function addDNS(dnsServer) {
     }
 }
 
+/**
+ * 切换常用DNS服务器下拉菜单
+ */
+function toggleDnsDropdown() {
+    const content = document.getElementById('dnsDropdownContent');
+    const arrow = document.getElementById('dnsDropdownArrow');
+    
+    if (!content || !arrow) return;
+    
+    if (content.style.maxHeight === '0px' || content.style.maxHeight === '') {
+        content.style.maxHeight = '300px';
+        arrow.style.transform = 'rotate(180deg)';
+    } else {
+        content.style.maxHeight = '0px';
+        arrow.style.transform = 'rotate(0deg)';
+    }
+}
+
 // 导出函数到全局作用域
 window.DNSUtils = {
     colorFromIp,
@@ -130,5 +182,6 @@ window.DNSUtils = {
     isLikelyIPv4,
     isARecordNonCopyable,
     copyToClipboard,
-    addDNS
+    addDNS,
+    toggleDnsDropdown
 };

@@ -5,9 +5,12 @@ import os
 import signal
 import sys
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
-PROGRESS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'query_progress.json')
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+PROGRESS_FILE = os.path.join(BASE_DIR, 'config', 'query_progress.json')
+LAST_RESULT_FILE = os.path.join(BASE_DIR, 'config', 'last_query_result.json')
 
 
 def _get_progress():
@@ -24,6 +27,7 @@ def _get_progress():
 def _save_progress(progress):
     """保存进度信息到文件。"""
     try:
+        os.makedirs(os.path.dirname(PROGRESS_FILE), exist_ok=True)
         with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
             json.dump(progress, f)
     except Exception:
@@ -227,16 +231,77 @@ def query_domains(domains, dns_servers_with_labels):
                             for server_key, server_results in domain_results.items():
                                 if 'A' in server_results and isinstance(server_results['A'], list):
                                     server_results['A'] = sorted(server_results['A'])
-
-        _mark_completed()
+        
+        # 任务完成后才标记完成，由外层调用
+        # _mark_completed() 
+        
         # 计算总耗时
         duration = time.time() - start_time
         return results, duration
     except (KeyboardInterrupt, SystemExit):
-        _mark_completed()
+        _mark_error()
         duration = time.time() - start_time
         return results, duration
 
+
+from utils.history_service import add_dns_history
+
+def run_query_task(domains, dns_servers_with_labels):
+    """在后台运行查询任务，并保存结果和历史。"""
+    try:
+        results, duration_seconds = query_domains(domains, dns_servers_with_labels)
+        
+        # 保存结果到文件
+        result_data = {
+            'results': results,
+            'stats': {
+                'domain_count': len(domains),
+                'dns_server_count': len(dns_servers_with_labels),
+                'duration_seconds': round(duration_seconds, 2)
+            },
+            'timestamp': time.time()
+        }
+        
+        os.makedirs(os.path.dirname(LAST_RESULT_FILE), exist_ok=True)
+        with open(LAST_RESULT_FILE, 'w', encoding='utf-8') as f:
+            json.dump(result_data, f, ensure_ascii=False)
+            
+        # 保存历史记录
+        add_dns_history(domains, dns_servers_with_labels, results, duration_seconds)
+        
+        # 标记完成
+        _mark_completed()
+        
+    except Exception as e:
+        print(f"后台查询任务失败: {e}")
+        _mark_error()
+
+def start_query_task(domains, dns_servers_with_labels):
+    """启动后台查询任务。"""
+    # 清除旧结果
+    if os.path.exists(LAST_RESULT_FILE):
+        try:
+            os.remove(LAST_RESULT_FILE)
+        except:
+            pass
+            
+    # 启动线程
+    thread = threading.Thread(
+        target=run_query_task,
+        args=(domains, dns_servers_with_labels)
+    )
+    thread.daemon = True
+    thread.start()
+
+def get_last_result():
+    """获取最后一次查询的结果。"""
+    try:
+        if os.path.exists(LAST_RESULT_FILE):
+            with open(LAST_RESULT_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
 
 def mark_error():
     _mark_error()

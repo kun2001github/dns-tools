@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Tools - 管理后台</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- 顶部导航栏 -->
+        <header class="admin-header">
+            <h1>DNS Tools 管理后台</h1>
+            <nav class="admin-nav">
+                <button class="nav-btn active" data-tab="dashboard">仪表盘</button>
+                <button class="nav-btn" data-tab="ip-stats">请求来源</button>
+                <button class="nav-btn" data-tab="config">配置管理</button>
+                <button class="nav-btn" data-tab="history">历史对比</button>
+                <a href="/" class="nav-btn back-btn">返回前台</a>
+            </nav>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="admin-main">
+            <!-- 仪表盘 Tab -->
+            <section id="tab-dashboard" class="tab-content active">
+                <!-- KPI 卡片 -->
+                <div class="kpi-cards">
+                    <div class="kpi-card">
+                        <div class="kpi-label">总请求数</div>
+                        <div class="kpi-value" id="kpi-total">-</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">平均响应时间</div>
+                        <div class="kpi-value" id="kpi-avg-time">-</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">错误率</div>
+                        <div class="kpi-value" id="kpi-error-rate">-</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">最慢接口</div>
+                        <div class="kpi-value" id="kpi-slowest">-</div>
+                    </div>
+                </div>
+
+                <!-- 日期范围选择器 -->
+                <div class="date-range-selector">
+                    <button class="date-btn active" data-days="7">最近7天</button>
+                    <button class="date-btn" data-days="30">最近30天</button>
+                    <input type="date" id="date-start" class="date-input">
+                    <span>至</span>
+                    <input type="date" id="date-end" class="date-input">
+                    <button id="apply-date-range" class="apply-btn">应用</button>
+                </div>
+
+                <!-- 图表区域 -->
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <h3>每日请求数趋势</h3>
+                        <canvas id="chart-daily"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>请求类型分布</h3>
+                        <canvas id="chart-types"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>24小时分布</h3>
+                        <canvas id="chart-hourly"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 请求来源 Tab -->
+            <section id="tab-ip-stats" class="tab-content">
+                <!-- 日期范围选择器 -->
+                <div class="date-range-selector">
+                    <button class="date-btn active" data-days="7">最近7天</button>
+                    <button class="date-btn" data-days="30">最近30天</button>
+                    <input type="date" id="ip-stats-date-start" class="date-input">
+                    <span>至</span>
+                    <input type="date" id="ip-stats-date-end" class="date-input">
+                    <button id="apply-ip-stats-date-range" class="apply-btn">应用</button>
+                </div>
+
+                <!-- IP汇总表格 -->
+                <div class="stats-section">
+                    <h3>IP请求汇总</h3>
+                    <div class="table-container">
+                        <table id="ip-stats-table" class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>IP地址</th>
+                                    <th>请求次数</th>
+                                    <th>查询域名数</th>
+                                    <th>域名列表</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ip-stats-tbody">
+                                <!-- 动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- IP详细记录 -->
+                <div id="ip-detail-section" class="stats-section" style="display: none;">
+                    <h3>IP详细请求记录 - <span id="detail-ip"></span></h3>
+                    <button id="close-ip-detail" class="close-btn">关闭</button>
+                    <div class="table-container">
+                        <table id="ip-detail-table" class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>Endpoint</th>
+                                    <th>查询域名</th>
+                                    <th>响应时间</th>
+                                    <th>状态码</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ip-detail-tbody">
+                                <!-- 动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 配置管理 Tab -->
+            <section id="tab-config" class="tab-content">
+                <!-- DNS 配置面板 -->
+                <div class="config-panel">
+                    <h3>DNS 服务器配置</h3>
+                    <textarea id="dns-config-textarea" class="config-textarea" placeholder="每行一个DNS服务器，格式: IP # 标签"></textarea>
+                    <div class="config-actions">
+                        <button id="save-dns-config" class="save-btn">保存 DNS 配置</button>
+                    </div>
+                </div>
+
+                <!-- IP API 配置面板 -->
+                <div class="config-panel">
+                    <h3>IP 归属地 API 配置</h3>
+                    <div id="ip-api-list" class="api-list">
+                        <!-- 动态加载 -->
+                    </div>
+                    <div class="config-actions">
+                        <button id="test-all-ip-apis" class="test-btn">测试全部</button>
+                        <button id="save-ip-apis" class="save-btn">保存配置</button>
+                    </div>
+                </div>
+
+                <!-- 系统参数面板 -->
+                <div class="config-panel">
+                    <h3>系统参数</h3>
+                    <div id="system-config-form" class="config-form">
+                        <!-- 动态加载 -->
+                    </div>
+                    <div class="config-actions">
+                        <button id="save-system-config" class="save-btn">保存参数</button>
+                        <button id="reset-system-config" class="reset-btn">恢复默认</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 历史对比 Tab -->
+            <section id="tab-history" class="tab-content">
+                <!-- 跨时间对比 -->
+                <div id="compare-time" class="compare-section active">
+                    <div class="compare-selectors">
+                        <div class="selector-group">
+                            <label>查询记录 A</label>
+                            <select id="history-select-a" class="history-select">
+                                <option value="">选择查询记录...</option>
+                            </select>
+                        </div>
+                        <div class="selector-group">
+                            <label>查询记录 B</label>
+                            <select id="history-select-b" class="history-select">
+                                <option value="">选择查询记录...</option>
+                            </select>
+                        </div>
+                        <button id="compare-time-btn" class="compare-btn">对比</button>
+                    </div>
+                    <div id="compare-time-result" class="compare-result">
+                        <!-- 对比结果表格 -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/admin-main.js"></script>
+    <script src="/static/js/admin-dashboard.js"></script>
+    <script src="/static/js/admin-ip-stats.js"></script>
+    <script src="/static/js/admin-config.js"></script>
+    <script src="/static/js/admin-compare.js"></script>
+</body>
+</html>

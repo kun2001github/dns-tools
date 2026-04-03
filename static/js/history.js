@@ -67,13 +67,13 @@ function generateNodeDetailContent(node) {
                         if (showInfo) {
                             shownIpInfo.add(display.copy);
                         }
-                        const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                        const interactionAttr = display.copyable ? 'title="单击查看详情，双击复制IP"' : '';
                         const containerClass = display.copyable ? 'a-record-container' : '';
                         const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
                         const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
                         const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
-                        const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
-                        html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
+                        const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                        html += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
                             <span class="record-tag" style="font-size:0.65rem; padding:2px 8px; white-space: nowrap;">A</span>
                             ${tagHtml}
                             <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%; ${display.style}">${display.text}</span>
@@ -177,13 +177,13 @@ function generateHistoryDetailContent(record, uniqueId) {
                             if (showInfo) {
                                 shownIpInfo.add(display.copy);
                             }
-                            const onClickAttr = display.copyable ? `onclick="window.DNSUtils.copyToClipboard('${display.copy}', event)" title="点击复制IP地址"` : '';
+                            const interactionAttr = display.copyable ? 'title="单击查看详情，双击复制IP"' : '';
                             const containerClass = display.copyable ? 'a-record-container' : '';
                             const dataAttr = display.copyable ? `data-a-ip="${display.copy}"` : '';
                             const colorAttr = display.color ? `data-ip-color="${display.color}"` : '';
                             const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
-                            const detailHtml = showInfo ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
-                            html += `<div class="${containerClass}" ${onClickAttr} ${dataAttr} style="margin-bottom:2px;">
+                            const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
+                            html += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="margin-bottom:2px;">
                                 <span class="record-tag" style="font-size:0.65rem; padding:2px 8px;">A</span>
                                 ${tagHtml}
                                 <span class="record-value" style="font-size:0.8rem; ${display.style}">${display.text}</span>
@@ -290,6 +290,9 @@ function loadTimelineDetail(uniqueId, nodeId) {
                 timelineResultWrapper.innerHTML = resultContent.innerHTML;
                 window.DisplayManager.refreshIpInfoTags(timelineResultWrapper);
             }
+            requestAnimationFrame(() => {
+                detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
             
             if (originalLastResult) {
                 mainResult.setAttribute('data-last-result', originalLastResult);
@@ -368,8 +371,8 @@ function displayHistory(history) {
                 </button>
                 <button class="btn btn-outline" style="flex:1; font-size:0.75rem; padding: 6px; display: flex; align-items: center; justify-content: center; gap: 4px;" onclick="toggleHistoryDetail('${uniqueId}')">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; transition: all 0.3s ease;">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M8 10l4 4 4-4"></path>
                     </svg>
                     <span>详情</span>
                 </button>
