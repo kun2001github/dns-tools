@@ -2,3 +2,6 @@ __pycache__
 *.pyc
 *.md
 .t*
+*.png
+*.yml
+.playwright*

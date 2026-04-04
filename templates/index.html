@@ -43,7 +43,8 @@
                         <button onclick="addDNS('8.8.8.8 # 谷歌DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">谷歌DNS</button>
                         <button onclick="addDNS('1.1.1.1 # Cloudflare')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">Cloudflare</button>
                     </div>
-                                   
+                </div>
+                
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
                     <button onclick="saveDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; transition: all 0.3s ease;">
@@ -67,7 +68,7 @@
             <!-- 中间：目标域名 -->
             <div class="glass-card">
                 <h3><span style="margin-right:8px;">🎯</span> 目标域名</h3>
-                <label>输入需要查询的网站（支持空格、逗号、换行分隔，支持URL格式）:</label>
+                <label>输入需要查询的网站（支持空格、逗号、换行分隔、顿号，支持URL格式）:</label>
                 <textarea id="domains" placeholder="example.com google.com&#10;https://www.google.com http://github.com/user/repo&#10;或: www.baidu.com,https://example.com?param=value,youtube.com" oninput="updatePreview()"></textarea>
                 
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -89,13 +90,21 @@
             </div>
 
             <!-- 右边：历史溯源 -->
-            <div class="glass-card">
+            <div class="glass-card" style="position: relative;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h3 style="margin:0;"><span style="margin-right:8px;">📜</span> 历史溯源</h3>
-                    <div style="position: relative;">
+                    <div style="position: relative; display: flex; align-items: center; gap: 8px;">
+                        <div style="position: relative;">
+                            <svg style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-dim); pointer-events: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <path d="m21 21-4.35-4.35"></path>
+                            </svg>
+                            <input type="text" id="historySearch" placeholder="搜索历史域名..." oninput="searchHistory(this.value)" style="padding: 6px 10px 6px 30px; font-size: 0.8rem; border: 1px solid var(--border-color); border-radius: 6px; background: rgba(15, 23, 42, 0.6); color: var(--text-color); width: 120px; outline: none; transition: all 0.2s ease;">
+                        </div>
                         <button id="clearHistoryBtn" onclick="clearHistory()" class="btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 4px 12px; font-size: 0.8rem; border-radius: 4px;">清空全部</button>
                     </div>
                 </div>
+                <div id="historySearchResults" style="display: none; margin-top: 4px; padding: 8px; background: #0f172a; border: 1px solid var(--accent-color); border-radius: 6px; position: absolute; top: 50px; left: 8px; right: 8px; max-height: calc(100% - 60px); overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>
                 <div id="historyList" class="history-panel"></div>
             </div>
         </div>

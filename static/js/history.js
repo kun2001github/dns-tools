@@ -74,11 +74,11 @@ function generateNodeDetailContent(node) {
                         const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
                         const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
                         html += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
-                            <span class="record-tag" style="font-size:0.65rem; padding:2px 8px; white-space: nowrap;">A</span>
+                            <span class="record-tag record-tag-a">A</span>
                             ${tagHtml}
                             <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%; ${display.style}">${display.text}</span>
                             ${detailHtml}
-                        </div>`; 
+                        </div>`;
                     });
 
                     html += `</div>`;
@@ -89,7 +89,7 @@ function generateNodeDetailContent(node) {
                     const cnames = Array.isArray(serverResults.CNAME) ? serverResults.CNAME : [serverResults.CNAME];
                     cnames.forEach(cn => { 
                         html += `<div style="margin-bottom:2px; width: 100%; box-sizing: border-box;">
-                            <span class="record-tag" style="color:#818cf8; background:rgba(129,140,248,0.1); font-size:0.65rem; padding:2px 8px; white-space: nowrap;">CNAME</span>
+                            <span class="record-tag record-tag-cname">CNAME</span>
                             <span class="record-value" style="font-size:0.8rem; word-break: break-all; max-width: 100%;">${cn}</span>
                         </div>`; 
                     });
@@ -184,11 +184,11 @@ function generateHistoryDetailContent(record, uniqueId) {
                             const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
                             const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
                             html += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="margin-bottom:2px;">
-                                <span class="record-tag" style="font-size:0.65rem; padding:2px 8px;">A</span>
+                                <span class="record-tag record-tag-a">A</span>
                                 ${tagHtml}
                                 <span class="record-value" style="font-size:0.8rem; ${display.style}">${display.text}</span>
                                 ${detailHtml}
-                            </div>`; 
+                            </div>`;
                         });
 
                         html += `</div>`;
@@ -199,7 +199,7 @@ function generateHistoryDetailContent(record, uniqueId) {
                         const cnames = Array.isArray(serverResults.CNAME) ? serverResults.CNAME : [serverResults.CNAME];
                         cnames.forEach(cn => { 
                             html += `<div style="margin-bottom:2px;">
-                                <span class="record-tag" style="color:#818cf8; background:rgba(129,140,248,0.1); font-size:0.65rem; padding:2px 8px;">CNAME</span>
+                                <span class="record-tag record-tag-cname">CNAME</span>
                                 <span class="record-value" style="font-size:0.8rem;">${cn}</span>
                             </div>`; 
                         });
@@ -220,6 +220,104 @@ function generateHistoryDetailContent(record, uniqueId) {
  * 全局存储历史记录数据
  */
 let gHistoryRecords = [];
+
+/**
+ * 搜索历史记录中的域名
+ */
+function searchHistory(keyword) {
+    const searchResultsDiv = document.getElementById('historySearchResults');
+    const historyList = document.getElementById('historyList');
+    
+    if (!keyword || !keyword.trim()) {
+        searchResultsDiv.style.display = 'none';
+        // 显示所有历史记录
+        displayHistory(gHistoryRecords);
+        return;
+    }
+    
+    const searchTerm = keyword.toLowerCase().trim();
+    const matchedRecords = [];
+    
+    // 搜索匹配的记录
+    gHistoryRecords.forEach((record, index) => {
+        const domains = record.domains || [];
+        const matchedDomains = domains.filter(d => d.toLowerCase().includes(searchTerm));
+        
+        if (matchedDomains.length > 0) {
+            matchedRecords.push({ record, index, matchedDomains });
+        }
+    });
+    
+    if (matchedRecords.length === 0) {
+        searchResultsDiv.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; padding: 10px; text-align: center;">未找到包含 "${keyword}" 的历史记录</div>`;
+        searchResultsDiv.style.display = 'block';
+        return;
+    }
+    
+    // 显示搜索结果
+    let html = `<div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">找到 ${matchedRecords.length} 条匹配记录</div>`;
+    
+    // 动态计算滚动区域最大高度：每条约60px，最多200px
+    const maxHeight = Math.min(matchedRecords.length * 60, 200);
+    const needScroll = matchedRecords.length > 3;
+    const scrollStyle = needScroll ? `overflow-y: auto; max-height: ${maxHeight}px;` : '';
+    html += `<div style="${scrollStyle}">`;
+    
+    matchedRecords.forEach(({ record, index, matchedDomains }) => {
+        const uniqueId = `h${index}`;
+        const recordId = record.id || record.time_nodes?.[0]?.id || '';
+        
+        matchedDomains.forEach(domain => {
+            html += `<div class="search-result-item" onclick="jumpToHistory('${uniqueId}', '${recordId}', '${domain}')" 
+                style="cursor: pointer; padding: 8px 10px; margin: 4px 0; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; font-size: 0.8rem; color: var(--text-color); transition: all 0.2s ease;"
+                onmouseover="this.style.background='rgba(56, 189, 248,0.25)';this.style.borderColor='var(--accent-color)'" 
+                onmouseout="this.style.background='rgba(56, 189, 248,0.15)';this.style.borderColor='rgba(56, 189, 248,0.3)'">
+                <span style="color: var(--text-dim); font-size: 0.75rem;">📍 ${record.date} ${record.time}</span>
+                <div style="color: var(--accent-color); font-weight: 600; margin-top: 2px;">${domain}</div>
+            </div>`;
+        });
+    });
+    
+    html += '</div>';
+    
+    searchResultsDiv.innerHTML = html;
+    searchResultsDiv.style.display = 'block';
+}
+
+/**
+ * 跳转到指定的历史记录
+ */
+function jumpToHistory(uniqueId, recordId, domain) {
+    // 隐藏搜索结果
+    const searchResultsDiv = document.getElementById('historySearchResults');
+    searchResultsDiv.style.display = 'none';
+    
+    // 清空搜索框
+    document.getElementById('historySearch').value = '';
+    
+    // 查找对应的记录
+    const recordIndex = parseInt(uniqueId.replace('h', ''));
+    const record = gHistoryRecords[recordIndex];
+    
+    if (!record) return;
+    
+    // 显示该记录的第一个时间节点详情
+    if (record.time_nodes && record.time_nodes.length > 0) {
+        const nodeId = record.time_nodes[0].id;
+        loadTimelineDetail(uniqueId, nodeId);
+        
+        // 滚动到结果区域
+        setTimeout(() => {
+            const detailsContainer = document.getElementById(`timeline-details-${uniqueId}`);
+            if (detailsContainer) {
+                detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+    } else {
+        // 旧格式记录 - 直接显示
+        toggleHistoryDetail(uniqueId, recordId);
+    }
+};
 
 /**
  * 加载时间轴节点的详细解析结果
@@ -514,5 +612,7 @@ window.HistoryManager = {
     loadTimelineDetail,
     copyToDomains,
     deleteHistoryItem,
-    clearHistory
+    clearHistory,
+    searchHistory,
+    jumpToHistory
 };

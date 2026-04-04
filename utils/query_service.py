@@ -7,6 +7,7 @@ import sys
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 PROGRESS_FILE = os.path.join(BASE_DIR, 'config', 'query_progress.json')
@@ -97,19 +98,32 @@ def query_single_dns_server(domain, dns_server_with_label):
     resolver.lifetime = 3
     server_results = {}
 
+    # A 记录查询耗时（毫秒）
+    a_query_time = None
+
     try:
+        a_start = datetime.now()
         answers = resolver.resolve(domain, 'A')
+        a_end = datetime.now()
+        a_query_time = int((a_end - a_start).total_seconds() * 1000)
         ip_addresses = sorted([str(answer) for answer in answers])
         server_results['A'] = ip_addresses
     except dns.resolver.NXDOMAIN:
         server_results['A'] = '域名不存在'
-
+        server_results['_a_status'] = 'error'
     except dns.resolver.NoAnswer:
         server_results['A'] = '没有 A 记录'
+        server_results['_a_status'] = 'warning'
     except dns.resolver.Timeout:
         server_results['A'] = '查询超时'
+        server_results['_a_status'] = 'warning'
     except Exception as e:
         server_results['A'] = str(e)
+        server_results['_a_status'] = 'error'
+
+    # 如果成功获取到A记录IP，添加查询耗时
+    if a_query_time is not None and isinstance(server_results.get('A'), list):
+        server_results['_a_query_time_ms'] = a_query_time
 
     try:
         answers = resolver.resolve(domain, 'CNAME')
@@ -117,12 +131,16 @@ def query_single_dns_server(domain, dns_server_with_label):
         server_results['CNAME'] = cname_records
     except dns.resolver.NXDOMAIN:
         server_results['CNAME'] = '域名不存在'
+        server_results['_cname_status'] = 'error'
     except dns.resolver.NoAnswer:
         server_results['CNAME'] = '没有 CNAME 记录'
+        server_results['_cname_status'] = 'warning'
     except dns.resolver.Timeout:
         server_results['CNAME'] = '查询超时'
+        server_results['_cname_status'] = 'warning'
     except Exception as e:
         server_results['CNAME'] = str(e)
+        server_results['_cname_status'] = 'error'
 
     return dns_server_with_label, server_results
 

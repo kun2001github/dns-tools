@@ -1406,3 +1406,56 @@ textarea:focus {
     transform: translateY(0) scale(0.97);
     background: rgba(56, 189, 248, 0.15);
 }
+
+/* 记录标签 - 分层级颜色 */
+.record-tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* A 记录 - 绿色 */
+.record-tag-a {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+/* CNAME 记录 - 紫色 */
+.record-tag-cname {
+    background: rgba(129, 140, 248, 0.15);
+    color: #818cf8;
+}
+
+/* 错误状态 - 红色 */
+.record-tag-error {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* 查询耗时 - 根据速度分级 */
+/* 快 (≤50ms) - 绿色 */
+.record-tag-time-fast {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+/* 中 (51-200ms) - 橙色 */
+.record-tag-time-medium {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+}
+
+/* 慢 (>200ms) - 红色 */
+.record-tag-time-slow {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* 警告/超时 - 橙色 */
+.record-tag-warning {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+}

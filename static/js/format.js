@@ -89,7 +89,7 @@ function updatePreview() {
     
     const domainInput = document.getElementById('domains').value.trim();
     const rawDomains = domainInput
-        .split(/[\s,\n]+/) // 支持空格、逗号、换行分隔
+        .split(/[\s,\u3001，]+/) // 支持空格、逗号、顿号、中文逗号分隔
         .map(d => d.trim())
         .filter(d => d);
     

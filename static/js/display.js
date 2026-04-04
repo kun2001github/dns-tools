@@ -766,6 +766,7 @@ function renderHorizontalView(container, resultsData, domainsToRender, dnsServer
 
                 if (records.A) {
                     const ips = Array.isArray(records.A) ? records.A : [records.A];
+                    const aQueryTime = records._a_query_time_ms;
                     ips.forEach(ip => {
                         const display = formatARecordDisplay(ip, consistency);
                         const showInfo = display.copyable && !shownIpInfo.has(display.copy);
@@ -779,12 +780,15 @@ function renderHorizontalView(container, resultsData, domainsToRender, dnsServer
                         const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
                         const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
                         const tagsBlock = tagHtml ? `<div>${tagHtml}</div>` : '';
+                        const timeTag = aQueryTime !== undefined ? `<span class="record-tag ${getTimeTagClass(aQueryTime)}">${aQueryTime}ms</span>` : '';
+                        const aStatus = records._a_status;
+                        const aTagClass = aStatus === 'error' ? 'record-tag-error' : (aStatus === 'warning' ? 'record-tag-warning' : 'record-tag-a');
 
                         dnsContent += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="margin-bottom: 4px;">
                             ${tagsBlock}
                             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                <span class="record-tag" style="font-size:0.6rem; padding:1px 6px;">A</span>
-                                <span style="${display.style}">${display.text}</span>
+                                <span class="record-tag ${aTagClass}">A</span>
+                                <span style="${display.style}">${display.text}</span>${timeTag}
                             </div>
                             ${detailHtml}
                         </div>`;
@@ -794,10 +798,12 @@ function renderHorizontalView(container, resultsData, domainsToRender, dnsServer
                 if (records.CNAME) {
                     const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
                     cnames.forEach(cn => {
-                        const isErr = cn.includes('错误') || cn.includes('Error') || cn.includes('不存在') || cn.includes('超时');
+                        const cnameStatus = records._cname_status;
+                        const cnameTagClass = cnameStatus === 'error' ? 'record-tag-error' : (cnameStatus === 'warning' ? 'record-tag-warning' : 'record-tag-cname');
+                        const isErr = cnameStatus === 'error';
                         const cnameStyle = isErr ? 'color: var(--error-color);' : '';
                         dnsContent += `<div style="margin-bottom: 4px;">
-                            <span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8; font-size:0.6rem; padding:1px 6px;">CNAME</span>
+                            <span class="record-tag ${cnameTagClass}">CNAME</span>
                             <span style="${cnameStyle}">${cn}</span>
                         </div>`;
                     });
@@ -842,6 +848,7 @@ function renderCardView(container, resultsData, domainsToRender, dnsServers) {
 
                 if(records.A) {
                     const ips = Array.isArray(records.A) ? records.A : [records.A];
+                    const aQueryTime = records._a_query_time_ms;
                     ips.forEach(ip => {
                         const display = formatARecordDisplay(ip, consistency);
                         const showInfo = display.copyable && !shownIpInfo.has(display.copy);
@@ -855,12 +862,15 @@ function renderCardView(container, resultsData, domainsToRender, dnsServers) {
                         const tagHtml = showInfo ? `<span class="ip-info-tags" data-ip-tags="${display.copy}" ${colorAttr}></span>` : '';
                         const detailHtml = display.copyable ? `<div class="ip-info-detail" data-ip-detail="${display.copy}"></div>` : '';
                         const tagsBlock = tagHtml ? `<div style="margin-bottom: 4px;">${tagHtml}</div>` : '';
+                        const timeTag = aQueryTime !== undefined ? `<span class="record-tag ${getTimeTagClass(aQueryTime)}">${aQueryTime}ms</span>` : '';
+                        const aStatus = records._a_status;
+                        const aTagClass = aStatus === 'error' ? 'record-tag-error' : (aStatus === 'warning' ? 'record-tag-warning' : 'record-tag-a');
 
                         html += `<div class="${containerClass}" ${interactionAttr} ${dataAttr} style="padding: 4px; border-radius: 4px;">
                             ${tagsBlock}
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span class="record-tag">A</span>
-                                <span class="record-value" style="${display.style}">${display.text}</span>
+                                <span class="record-tag ${aTagClass}">A</span>
+                                <span class="record-value" style="${display.style}">${display.text}</span>${timeTag}
                             </div>
                             ${detailHtml}
                         </div>`;
@@ -870,9 +880,11 @@ function renderCardView(container, resultsData, domainsToRender, dnsServers) {
                 if(records.CNAME) {
                     const cnames = Array.isArray(records.CNAME) ? records.CNAME : [records.CNAME];
                     cnames.forEach(cn => {
-                        const isErr = cn.includes('错误') || cn.includes('Error') || cn.includes('不存在') || cn.includes('超时');
+                        const cnameStatus = records._cname_status;
+                        const cnameTagClass = cnameStatus === 'error' ? 'record-tag-error' : (cnameStatus === 'warning' ? 'record-tag-warning' : 'record-tag-cname');
+                        const isErr = cnameStatus === 'error';
                         const cnameStyle = isErr ? 'color: var(--error-color);' : '';
-                        html += `<div><span class="record-tag" style="background:rgba(129,140,248,0.1); color:#818cf8">CNAME</span><span class="record-value" style="${cnameStyle}">${cn}</span></div>`;
+                        html += `<div><span class="record-tag ${cnameTagClass}">CNAME</span><span class="record-value" style="${cnameStyle}">${cn}</span></div>`;
                     });
                 }
                 html += `</div>`;
@@ -929,5 +941,21 @@ window.DisplayManager = {
     bindARecordHoverHighlight,
     refreshIpInfoTags,
     renderResults,
-    toggleViewMode
+    toggleViewMode,
+    getTimeTagClass
 };
+
+/**
+ * 根据查询耗时返回对应的 CSS 类
+ * @param {number} ms - 查询耗时（毫秒）
+ * @returns {string} CSS 类名
+ */
+function getTimeTagClass(ms) {
+    if (ms <= 50) {
+        return 'record-tag-time-fast';  // 快 - 绿色
+    } else if (ms <= 200) {
+        return 'record-tag-time-medium'; // 中 - 橙色
+    } else {
+        return 'record-tag-time-slow';   // 慢 - 红色
+    }
+}

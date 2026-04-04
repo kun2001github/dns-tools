@@ -41,7 +41,7 @@ async function queryDNS() {
     const domainInput = document.getElementById('domains').value.trim();
 
     const rawDomains = domainInput
-        .split(/[\s,\n]+/)
+        .split(/[\s,\u3001，]+/)
         .map(d => d.trim())
         .filter(d => d);
     
