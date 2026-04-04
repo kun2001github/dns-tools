@@ -1,0 +1,585 @@
+/* 网址请求分析样式 */
+
+/* 输入区域 */
+#urlInput:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+}
+
+/* 加载状态 */
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    margin: 0 auto;
+    border: 4px solid rgba(56, 189, 248, 0.2);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 总耗时标签 */
+.total-time-badge {
+    background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+    color: white;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* 甘特图样式 */
+.gantt-chart {
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.gantt-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.gantt-row:last-child {
+    margin-bottom: 0;
+}
+
+.gantt-label {
+    width: 140px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.gantt-bar-container {
+    flex: 1;
+    height: 28px;
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+.gantt-bar {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.5s ease;
+    min-width: 2px;
+}
+
+.gantt-value {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8rem;
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+}
+
+/* 甘特图图例 */
+.gantt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.legend-label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+/* 域名统计网格 */
+.domain-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+@media (max-width: 900px) {
+    .domain-stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.domain-stat-card {
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.domain-stat-card.main-domain {
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.domain-stat-card.related-domain {
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+.domain-stat-card.third-party-domain {
+    border-color: rgba(236, 72, 153, 0.3);
+}
+
+.domain-stat-header {
+    padding: 12px 15px;
+    background: rgba(30, 41, 59, 0.5);
+}
+
+.domain-type-badge {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+.main-domain .domain-type-badge {
+    background: rgba(56, 189, 248, 0.2);
+    color: var(--accent-color);
+}
+
+.related-domain .domain-type-badge {
+    background: rgba(139, 92, 246, 0.2);
+    color: #8b5cf6;
+}
+
+.third-party-domain .domain-type-badge {
+    background: rgba(236, 72, 153, 0.2);
+    color: #ec4899;
+}
+
+.domain-stat-body {
+    padding: 15px;
+}
+
+.domain-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 12px;
+    word-break: break-all;
+}
+
+.domain-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    min-height: 30px;
+}
+
+.domain-tag {
+    background: rgba(56, 189, 248, 0.1);
+    color: var(--accent-color);
+    padding: 3px 10px;
+    border-radius: 15px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.domain-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.domain-stat-row:last-child {
+    border-bottom: none;
+}
+
+.stat-value {
+    font-weight: 600;
+    color: var(--text-color);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* 筛选标签 */
+.filter-tabs {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.filter-tab {
+    padding: 8px 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.filter-tab:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.filter-tab.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+}
+
+/* 请求统计 */
+.requests-stats {
+    padding: 10px 15px;
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 8px;
+}
+
+/* 请求表格 */
+.requests-table-container {
+    background: rgba(15, 23, 42, 0.3);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.requests-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.requests-table thead {
+    position: sticky;
+    top: 0;
+    background: rgba(30, 41, 59, 0.95);
+    z-index: 10;
+}
+
+.requests-table th {
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.requests-table td {
+    padding: 10px 15px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.3);
+    color: var(--text-color);
+}
+
+.requests-table tbody tr:hover {
+    background: rgba(56, 189, 248, 0.05);
+}
+
+.url-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.domain-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.method-badge {
+    background: rgba(56, 189, 248, 0.2);
+    color: var(--accent-color);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-success {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+
+.status-redirect {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+
+.status-client-error {
+    background: rgba(249, 115, 22, 0.2);
+    color: #f97316;
+}
+
+.status-server-error {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+/* 域名耗时对比图表 */
+.domain-duration-chart {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.duration-chart-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 10px;
+}
+
+.duration-bars-container {
+    position: relative;
+    overflow: visible;
+}
+
+.duration-domain {
+    min-width: 200px;
+    max-width: 300px;
+    font-size: 0.8rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.duration-domain {
+    flex: 1;
+    min-width: 300px;
+    max-width: 500px;
+    font-size: 0.8rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.duration-domain:hover {
+    color: #38bdf8;
+    text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+}
+
+.duration-bars {
+    flex: 1;
+    height: 24px;
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.duration-bar-total {
+    position: absolute;
+    height: 100%;
+    background: rgba(56, 189, 248, 0.6);
+    border-radius: 4px;
+    min-width: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+}
+
+.duration-bar-avg {
+    position: absolute;
+    height: 50%;
+    bottom: 0;
+    background: rgba(34, 197, 94, 0.7);
+    border-radius: 0 0 4px 4px;
+    min-width: 2px;
+}
+
+.duration-value {
+    font-size: 0.7rem;
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.duration-count {
+    width: 80px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* 复制域名按钮 */
+.btn-copy {
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    color: var(--accent-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: auto;
+    vertical-align: middle;
+}
+
+.btn-copy:hover {
+    background: rgba(56, 189, 248, 0.25);
+    border-color: var(--accent-color);
+}
+
+/* 域名分类标签 */
+.domain-category-tag {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    color: white;
+    font-weight: 600;
+    flex-shrink: 0;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.domain-category-tag:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 筛选按钮容器 */
+.domain-filter-btn {
+    padding: 6px 12px;
+    border-radius: 10px;
+    transition: all 0.25s ease;
+    border: 1px solid transparent;
+}
+
+.domain-filter-btn.active {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+}
+
+.domain-filter-btn:hover {
+    transform: translateY(-1px);
+}
+
+/* 复制按钮 */
+.btn-copy {
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    padding: 8px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.25s ease;
+    color: #38bdf8;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.btn-copy:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+}
+
+/* 排序按钮 */
+.sort-btn {
+    transition: all 0.2s ease;
+}
+
+.sort-btn:hover {
+    background: rgba(56, 189, 248, 0.1) !important;
+    border-color: rgba(56, 189, 248, 0.3) !important;
+}
+
+.sort-btn.active {
+    background: rgba(56, 189, 248, 0.15) !important;
+    border-color: rgba(56, 189, 248, 0.3) !important;
+    color: #38bdf8 !important;
+}
+
+/* 域名请求次数标签 */
+.domain-count-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    color: white;
+    font-weight: 600;
+    flex-shrink: 0;
+    white-space: nowrap;
+    background: rgba(100, 116, 139, 0.6);
+    min-width: 28px;
+    text-align: center;
+}
+
+/* 历史记录列表 */
+.history-list {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(56, 189, 248, 0.3) transparent;
+}
+
+.history-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.history-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+    background: rgba(56, 189, 248, 0.3);
+    border-radius: 3px;
+}
+
+.history-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(56, 189, 248, 0.5);
+}
+
+/* 清空历史按钮 */
+.btn-clear-history {
+    transition: all 0.2s ease;
+}
+
+.btn-clear-history:hover {
+    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.15);
+}

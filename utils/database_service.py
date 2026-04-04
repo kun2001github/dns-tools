@@ -142,6 +142,35 @@ def init_database():
         ON system_config(config_key)
     ''')
 
+    # 创建网址请求分析记录表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS performance_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_id TEXT UNIQUE NOT NULL,
+            url TEXT NOT NULL,
+            total_requests INTEGER NOT NULL,
+            total_duration_ms INTEGER NOT NULL,
+            domain_stats TEXT NOT NULL,
+            timing_data TEXT,
+            requests_data TEXT,
+            timestamp TEXT NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # 创建索引以提高查询性能
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_performance_analyses_timestamp 
+        ON performance_analyses(timestamp DESC)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_performance_analyses_url 
+        ON performance_analyses(url)
+    ''')
+
     # 插入系统配置默认值
     default_configs = [
         ('cache_ttl_days', '30', 'IP信息缓存过期天数'),
@@ -521,3 +550,230 @@ def get_query_stats_summary() -> Dict[str, Any]:
             'min_duration': 0,
             'max_duration': 0
         }
+
+
+def save_performance_analysis(
+    analysis_id: str,
+    url: str,
+    total_requests: int,
+    total_duration_ms: int,
+    domain_stats: List[Dict[str, Any]],
+    timing_data: Optional[Dict[str, Any]] = None,
+    requests_data: Optional[List[Dict[str, Any]]] = None
+) -> bool:
+    """保存网址请求分析记录到数据库。
+    
+    Args:
+        analysis_id: 分析ID (格式: performance_YYYYMMDDHHmmss)
+        url: 分析的URL
+        total_requests: 总请求数
+        total_duration_ms: 总耗时(毫秒)
+        domain_stats: 域名统计数据
+        timing_data: 页面加载时序数据
+        requests_data: 请求详情数据
+    
+    Returns:
+        bool: 保存成功返回True，失败返回False
+    """
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # 生成时间戳信息
+        now = datetime.now()
+        timestamp = now.strftime('%Y-%m-%d %H:%M:%S')
+        date = now.strftime('%Y-%m-%d')
+        time = now.strftime('%H:%M:%S')
+        
+        # 序列化为JSON
+        domain_stats_json = json.dumps(domain_stats, ensure_ascii=False)
+        timing_data_json = json.dumps(timing_data, ensure_ascii=False) if timing_data else None
+        requests_data_json = json.dumps(requests_data, ensure_ascii=False) if requests_data else None
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO performance_analyses 
+            (analysis_id, url, total_requests, total_duration_ms, domain_stats, timing_data, requests_data, timestamp, date, time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (analysis_id, url, total_requests, total_duration_ms, domain_stats_json, timing_data_json, requests_data_json, timestamp, date, time))
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"保存性能分析记录失败: {e}")
+        return False
+
+
+def get_performance_analysis_history(limit: int = 50) -> List[Dict[str, Any]]:
+    """获取性能分析历史记录，按时间倒序排列。
+    
+    Args:
+        limit: 返回记录数量限制，默认50条
+    
+    Returns:
+        List[Dict]: 性能分析记录列表
+    """
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                analysis_id,
+                url,
+                total_requests,
+                total_duration_ms,
+                domain_stats,
+                timestamp,
+                date,
+                time
+            FROM performance_analyses
+            ORDER BY timestamp DESC
+            LIMIT ?
+        ''', (limit,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # 转换为字典列表
+        analyses = []
+        for row in rows:
+            analyses.append({
+                'analysis_id': row['analysis_id'],
+                'url': row['url'],
+                'total_requests': row['total_requests'],
+                'total_duration_ms': row['total_duration_ms'],
+                'domain_stats': json.loads(row['domain_stats']),
+                'timestamp': row['timestamp'],
+                'date': row['date'],
+                'time': row['time']
+            })
+        
+        return analyses
+    except Exception as e:
+        print(f"获取性能分析历史失败: {e}")
+        return []
+
+
+def get_performance_analysis_by_id(analysis_id: str) -> Optional[Dict[str, Any]]:
+    """根据分析ID获取单条性能分析记录。
+    
+    Args:
+        analysis_id: 分析ID
+    
+    Returns:
+        Dict: 性能分析记录，如果不存在返回None
+    """
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                analysis_id,
+                url,
+                total_requests,
+                total_duration_ms,
+                domain_stats,
+                timing_data,
+                requests_data,
+                timestamp,
+                date,
+                time
+            FROM performance_analyses
+            WHERE analysis_id = ?
+        ''', (analysis_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'analysis_id': row['analysis_id'],
+                'url': row['url'],
+                'total_requests': row['total_requests'],
+                'total_duration_ms': row['total_duration_ms'],
+                'domain_stats': json.loads(row['domain_stats']) if row['domain_stats'] else [],
+                'timing_data': json.loads(row['timing_data']) if row['timing_data'] else None,
+                'requests_data': json.loads(row['requests_data']) if row['requests_data'] else [],
+                'timestamp': row['timestamp'],
+                'date': row['date'],
+                'time': row['time']
+            }
+        return None
+    except Exception as e:
+        print(f"获取性能分析记录失败: {e}")
+        return None
+
+
+def delete_performance_analysis(analysis_id: str) -> bool:
+    """删除指定的性能分析记录。
+    
+    Args:
+        analysis_id: 分析ID
+    
+    Returns:
+        bool: 删除成功返回True，失败返回False
+    """
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM performance_analyses WHERE analysis_id = ?', (analysis_id,))
+        
+        conn.commit()
+        affected_rows = cursor.rowcount
+        conn.close()
+        
+        return affected_rows > 0
+    except Exception as e:
+        print(f"删除性能分析记录失败: {e}")
+        return False
+
+
+def clear_performance_analysis_history() -> bool:
+    """清空所有性能分析记录。
+    
+    Returns:
+        bool: 清空成功返回True，失败返回False
+    """
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM performance_analyses')
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"清空性能分析记录失败: {e}")
+        return False
+
+
+def get_performance_analysis_count() -> int:
+    """获取性能分析记录总数。
+    
+    Returns:
+        int: 记录总数
+    """
+    try:
+        init_database()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM performance_analyses')
+        count = cursor.fetchone()[0]
+        conn.close()
+        
+        return count or 0
+    except Exception as e:
+        print(f"获取性能分析总数失败: {e}")
+        return 0

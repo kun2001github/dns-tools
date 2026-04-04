@@ -117,7 +117,7 @@
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 12px; justify-content: flex-start; align-items: flex-start; margin: 30px 0; width: 100%;">
-            <div style="position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 68px;">
+            <div style="position: relative; display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 68px;">
                 <button onclick="toggleViewMode()" id="viewToggleBtn" class="btn btn-outline" style="font-size: 1.2rem; padding: 16px 40px; border-radius: 50px; letter-spacing: 2px; border: 2px solid var(--accent-color); color: var(--accent-color); transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;">
                     <svg id="viewToggleIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 22px; height: 22px; transition: all 0.3s ease;">
                         <rect x="3" y="3" width="7" height="7"></rect>
@@ -128,7 +128,14 @@
                     <span id="viewToggleText">视图切换</span>
                 </button>
 
-                <button onclick="queryDNS()" class="btn btn-primary query-main-btn" style="position: absolute; left: 50%; transform: translateX(-50%);">RUN QUERY</button>
+                <button onclick="queryDNS()" class="btn btn-primary query-main-btn">RUN QUERY</button>
+                
+                <button onclick="openPerformanceTab()" class="btn btn-outline" style="font-size: 1rem; padding: 16px 24px; border-radius: 50px; border: 2px solid var(--accent-color); color: var(--accent-color); transition: all 0.3s ease; display: flex; align-items: center; gap: 8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
+                        <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9"></path>
+                    </svg>
+                    <span>网址请求分析</span>
+                </button>
             </div>
 
             <div id="verticalViewHint" style="display: block; text-align: left; color: var(--text-dim); font-size: 0.85rem; line-height: 1.4; max-width: 980px;">
@@ -139,7 +146,7 @@
         </div>
 
         <div class="footer-info">
-            StandardSoftware IT TOOLBOX &copy; 2026 // DNS BATCH ANALYZER V2.2
+            StandardSoftware IT TOOLBOX &copy; 2026 // DNS BATCH ANALYZER V2.3
         </div>
 
         <!-- 返回顶部按钮 -->
@@ -157,6 +164,18 @@
     <script src="{{ url_for('static', filename='js/history.js') }}"></script>
     <script src="{{ url_for('static', filename='js/query.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // 使用 window.open 带窗口名自动复用已存在的标签页
+        function openPerformanceTab() {
+            // 使用固定窗口名 'dns_tools_performance'，会自动复用同名标签页
+            var newWindow = window.open('/performance', 'dns_tools_performance');
+            
+            // 如果被浏览器拦截（返回 null），则在当前标签页跳转
+            if (!newWindow || newWindow === null) {
+                window.location.href = '/performance';
+            }
+        }
+    </script>
 </body>
 
 </html>

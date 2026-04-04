@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网址请求分析 - DNS Tools</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/performance.css') }}">
+</head>
+<body>
+    <canvas id="constellation-canvas" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1;"></canvas>
+    <div class="main-container">
+        <div style="text-align: center; margin-bottom: 40px; position: relative;">
+            <h1 style="font-size: 2.5rem; margin-bottom: 10px; background: linear-gradient(to right, #fff, #38bdf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">网址请求分析</h1>
+            <p style="color: var(--text-dim);">模拟浏览器请求，分析网络请求和页面加载阶段耗时</p>
+            <button onclick="openMainPage()" style="position: absolute; right: 20px; top: 0; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
+                ← 返回首页
+            </button>
+        </div>
+
+        <!-- 输入区域 -->
+        <div style="display: flex; gap: 20px; max-width: 1200px; margin: 0 auto 30px;">
+            <div class="glass-card" style="flex: 1;">
+                <h3><span style="margin-right:8px;">🔍</span> 输入网址</h3>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <input type="text" id="urlInput" placeholder="输入域名、网站或URL，例如: example.com 或 https://www.google.com" 
+                           style="flex: 1; padding: 14px 18px; font-size: 1rem; border: 2px solid var(--border-color); border-radius: 10px; background: rgba(15, 23, 42, 0.6); color: var(--text-color); outline: none; transition: all 0.3s ease;">
+                    <button type="button" onclick="startAnalysis()" class="btn btn-primary" style="padding: 14px 30px; font-size: 1rem; border-radius: 10px; white-space: nowrap;">
+                        <span id="analyzeBtnText">开始分析</span>
+                    </button>
+                </div>
+                <p style="margin-top: 10px; font-size: 0.85rem; color: var(--text-dim);">支持输入：域名 (example.com)、网站 (www.example.com)、完整URL (https://example.com)</p>
+                <p style="margin-top: 8px; font-size: 0.8rem; color: var(--text-dim);">
+                    💡 按 <kbd style="background: rgba(56,189,248,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.75rem;">Enter</kbd> 快捷开始分析 · 建议输入完整URL以获得更准确的分析结果
+                </p>
+                <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="font-size: 0.75rem; color: var(--text-dim);">快速示例：</span>
+                    <a href="#" onclick="document.getElementById('urlInput').value='https://www.baidu.com'; return false;" style="font-size: 0.75rem; color: #38bdf8; text-decoration: none; padding: 3px 8px; background: rgba(56,189,248,0.1); border-radius: 4px; transition: all 0.2s;">百度</a>
+                    <a href="#" onclick="document.getElementById('urlInput').value='https://www.jd.com'; return false;" style="font-size: 0.75rem; color: #38bdf8; text-decoration: none; padding: 3px 8px; background: rgba(56,189,248,0.1); border-radius: 4px; transition: all 0.2s;">京东</a>
+                    <a href="#" onclick="document.getElementById('urlInput').value='https://www.google.com'; return false;" style="font-size: 0.75rem; color: #38bdf8; text-decoration: none; padding: 3px 8px; background: rgba(56,189,248,0.1); border-radius: 4px; transition: all 0.2s;">谷歌</a>
+                    <a href="#" onclick="document.getElementById('urlInput').value='https://www.bilibili.com'; return false;" style="font-size: 0.75rem; color: #38bdf8; text-decoration: none; padding: 3px 8px; background: rgba(56,189,248,0.1); border-radius: 4px; transition: all 0.2s;">B站</a>
+                    <a href="#" onclick="document.getElementById('urlInput').value='https://www.taobao.com'; return false;" style="font-size: 0.75rem; color: #38bdf8; text-decoration: none; padding: 3px 8px; background: rgba(56,189,248,0.1); border-radius: 4px; transition: all 0.2s;">淘宝</a>
+                </div>
+                <p id="analysisCount" style="margin-top: 10px; font-size: 0.75rem; color: var(--text-dim);">📊 累计已分析 -- 次</p>
+                <button type="button" onclick="switchToDnsAnalystPro()" style="margin-top: 8px; padding: 16px 24px; background: transparent; border: 2px solid var(--accent-color); border-radius: 50px; color: var(--accent-color); font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
+                        <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9"></path>
+                    </svg>
+                    <span>DNS ANALYST PRO</span>
+                </button>
+            </div>
+            
+            <!-- 历史记录侧边栏 -->
+            <div class="glass-card" style="width: 320px; flex-shrink: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0;"><span style="margin-right:8px;">📜</span> 历史记录</h3>
+                    <button type="button" onclick="clearPerformanceHistory()" class="btn-clear-history" title="清空历史" style="background: transparent; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; border-radius: 4px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+                <!-- 搜索框 -->
+                <input type="text" id="historySearch" placeholder="搜索历史记录..." 
+                       oninput="filterHistory(this.value)"
+                       style="width: 100%; padding: 8px 12px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(15, 23, 42, 0.6); color: var(--text-color); outline: none; margin-bottom: 10px; box-sizing: border-box;">
+                <div id="historyList" class="history-list" style="max-height: 220px; overflow-y: auto;">
+                    <p style="color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 20px 0;">暂无历史记录</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 加载状态 -->
+        <div id="loadingState" class="glass-card" style="max-width: 800px; margin: 0 auto 30px; display: none;">
+            <div style="text-align: center; padding: 40px 20px;">
+                <div class="loading-spinner"></div>
+                <p style="margin-top: 20px; color: var(--accent-color); font-size: 1.1rem;">正在分析页面性能...</p>
+                <p id="loadingStatus" style="margin-top: 10px; color: var(--text-dim); font-size: 0.9rem;">等待分析开始...</p>
+            </div>
+        </div>
+
+        <!-- 错误提示 -->
+        <div id="errorState" class="glass-card" style="max-width: 800px; margin: 0 auto 30px; display: none;">
+            <div style="text-align: center; padding: 30px 20px; color: #ef4444;">
+                <p style="font-size: 1.1rem; margin-bottom: 10px;">❌ 分析失败</p>
+                <p id="errorMessage" style="color: var(--text-dim);"></p>
+            </div>
+        </div>
+
+        <!-- 结果区域 -->
+        <div id="resultsContainer" style="display: none;">
+            <!-- Timing 甘特图 -->
+            <div class="glass-card" style="margin-bottom: 30px;">
+                <h3><span style="margin-right:8px;">📊</span> 页面加载阶段耗时</h3>
+                <div style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <span style="color: var(--text-dim);">总耗时:</span>
+                        <span id="totalTime" class="total-time-badge">0 ms</span>
+                    </div>
+                    <div id="ganttChart" class="gantt-chart">
+                        <!-- 甘特图内容由 JS 动态生成 -->
+                    </div>
+                    <div id="ganttLegend" class="gantt-legend">
+                        <!-- 图例由 JS 动态生成 -->
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="glass-card" style="margin-bottom: 30px;">
+                <h3>
+                    <span style="margin-right:8px;">📈</span> 域名分析情况
+                    <span id="domainStatsSummary" class="domain-stats-summary"></span>
+                    <button type="button" class="btn-copy" onclick="copyAllDomains(event)" title="复制域名" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 6px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #38bdf8;">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span style="color: #38bdf8; font-size: 0.8rem; font-weight: 500;">复制</span>
+                    </button>
+                    <span id="copySuccessTip" style="margin-left: 12px; color: #22c55e; font-size: 0.8rem; font-weight: 500; opacity: 0; transition: opacity 0.3s ease; position: absolute; z-index: 1000; background: rgba(34, 197, 94, 0.9); padding: 6px 12px; border-radius: 6px; color: white;"></span>
+                </h3>
+                <!-- 排序按钮移到标题下方 -->
+                <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+                    <span style="color: var(--text-dim); font-size: 0.75rem;">排序:</span>
+                    <button type="button" onclick="sortDomainStats('count', this)" class="sort-btn active" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: #38bdf8;">次数</button>
+                    <button type="button" onclick="sortDomainStats('category', this)" class="sort-btn" style="background: transparent; border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: var(--text-dim);">类型</button>
+                    <button type="button" onclick="sortDomainStats('avg_duration', this)" class="sort-btn" style="background: transparent; border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: var(--text-dim);">平均累计耗时</button>
+                    <button type="button" onclick="sortDomainStats('avg_concurrent_duration', this)" class="sort-btn" style="background: transparent; border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; color: var(--text-dim);">平均并发耗时</button>
+                    <!-- 列标题 - 显示在中间 -->
+                    <div style="margin-left: auto; display: flex; align-items: center; justify-content: center; width: 100%; padding-right: 80px;">
+                        <span style="color: #38bdf8; font-weight: 600; font-size: 0.7rem; width: 50%; text-align: center;">平均累计耗时(ms)</span>
+                        <span style="color: #22c55e; font-weight: 600; font-size: 0.7rem; width: 50%; text-align: center;">平均并发耗时(ms)</span>
+                    </div>
+                </div>
+                <div id="domainDurationChart" class="domain-duration-chart">
+                    <!-- 图表由 JS 动态生成 -->
+                </div>
+            </div>
+
+            <!-- 网络请求表格 -->
+            <div class="glass-card">
+                <h3><span style="margin-right:8px;">📋</span> 网络请求详情</h3>
+                
+                <!-- 筛选标签 -->
+                <div class="filter-tabs" style="margin-top: 20px;">
+                    <button type="button" class="filter-tab active" data-filter="all" onclick="filterRequests('all')">全部请求</button>
+                    <button type="button" class="filter-tab" data-filter="main" onclick="filterRequests('main')">请求域名</button>
+                    <button type="button" class="filter-tab" data-filter="related" onclick="filterRequests('related')">子域名</button>
+                    <button type="button" class="filter-tab" data-filter="third_party" onclick="filterRequests('third_party')">三方域名</button>
+                </div>
+                
+                <!-- 统计信息 -->
+                <div id="requestsStats" class="requests-stats" style="margin: 15px 0; font-size: 0.9rem; color: var(--text-dim);">
+                    共 <span id="totalRequestsCount">0</span> 个请求
+                </div>
+                
+                <!-- 请求表格 -->
+                <div class="requests-table-container" style="max-height: 500px; overflow-y: auto; margin-top: 15px;">
+                    <table class="requests-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40%;">URL</th>
+                                <th style="width: 8%;">方法</th>
+                                <th style="width: 8%;">状态</th>
+                                <th style="width: 12%;">类型</th>
+                                <th style="width: 12%;">耗时</th>
+                                <th style="width: 20%;">域名</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requestsTableBody">
+                            <!-- 请求数据由 JS 动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-info">
+            StandardSoftware IT TOOLBOX &copy; 2026 // 网址请求分析工具 V2.3
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/config.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/performance.js') }}"></script>
+    <script>
+        // 使用 window.open 带窗口名自动复用已存在的标签页返回首页
+        function openMainPage() {
+            // 使用固定窗口名 'dns_tools_main'，会自动复用同名标签页
+            var newWindow = window.open('/', 'dns_tools_main');
+            
+            // 如果被浏览器拦截（返回 null），则在当前标签页跳转
+            if (!newWindow || newWindow === null) {
+                window.location.href = '/';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -26,9 +26,14 @@ from utils.database_service import (
     get_ip_info_cache,
     save_ip_info_cache,
     delete_expired_ip_info_errors,
-    delete_expired_ip_info_cache
+    delete_expired_ip_info_cache,
+    get_performance_analysis_history,
+    get_performance_analysis_by_id,
+    delete_performance_analysis,
+    clear_performance_analysis_history
 )
 from utils.request_logger import log_request, should_log_request
+from utils.performance_service import start_performance_analysis, get_performance_result, get_performance_step
 
 
 
@@ -1223,6 +1228,135 @@ def admin_history_dns_compare():
         return jsonify({'error': str(e)}), 500
 
 
+# ==================== 网址请求分析 API ====================
+
+@app.route('/performance')
+def performance_page():
+    """网址请求分析页面。"""
+    return render_template('performance.html')
+
+
+@app.route('/api/performance/analyze', methods=['POST'])
+def performance_analyze_route():
+    """执行网址请求分析。"""
+    try:
+        import uuid
+        data = request.get_json() or {}
+        url = data.get('url', '').strip()
+        
+        if not url:
+            return jsonify({'error': 'URL不能为空'}), 400
+        
+        # 生成任务ID
+        task_id = str(uuid.uuid4())
+        
+        # 后台执行分析
+        from threading import Thread
+        thread = Thread(target=start_performance_analysis, args=(url, task_id))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'status': 'started',
+            'task_id': task_id,
+            'message': '性能分析任务已启动'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/performance/result/<task_id>', methods=['GET'])
+def performance_result_route(task_id):
+    """获取性能分析结果。"""
+    try:
+        result = get_performance_result(task_id)
+        step_info = get_performance_step(task_id)
+        
+        # 如果任务还没开始，返回步骤信息
+        if not result and step_info:
+            return jsonify({
+                'status': 'running',
+                'step': step_info.get('step'),
+                'message': step_info.get('label'),
+                'error': step_info.get('error')
+            })
+        
+        if not result:
+            return jsonify({'error': '任务不存在或未完成'}), 404
+        
+        if result.get('error'):
+            return jsonify({
+                'status': 'error',
+                'error': result['error']
+            }), 500
+        
+        return jsonify({
+            'status': 'completed',
+            'data': result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/performance/history', methods=['GET'])
+def performance_history_route():
+    """获取性能分析历史记录。"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        history = get_performance_analysis_history(limit)
+        return jsonify({'history': history})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/performance/count', methods=['GET'])
+def performance_count_route():
+    """获取性能分析记录总数。"""
+    try:
+        from utils.database_service import get_performance_analysis_count
+        count = get_performance_analysis_count()
+        return jsonify({'count': count})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/performance/history/<analysis_id>', methods=['GET'])
+def performance_history_detail_route(analysis_id):
+    """根据分析ID获取历史记录详情。"""
+    try:
+        record = get_performance_analysis_by_id(analysis_id)
+        if not record:
+            return jsonify({'error': '记录不存在'}), 404
+        return jsonify({'data': record})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/performance/history/<analysis_id>', methods=['DELETE'])
+def performance_history_delete_route(analysis_id):
+    """删除指定的性能分析历史记录。"""
+    try:
+        success = delete_performance_analysis(analysis_id)
+        if success:
+            return jsonify({'message': '记录删除成功'})
+        else:
+            return jsonify({'error': '记录不存在'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/performance/history', methods=['DELETE'])
+def performance_history_clear_route():
+    """清空所有性能分析历史记录。"""
+    try:
+        success = clear_performance_analysis_history()
+        if success:
+            return jsonify({'message': '历史记录已清空'})
+        return jsonify({'error': '清空失败'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # 优雅处理Gunicorn的SIGTERM信号
 def handle_sigterm(signum, frame):
     sys.exit(0)
@@ -1231,4 +1365,4 @@ def handle_sigterm(signum, frame):
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
-    app.run(debug=True, port=8000)
+    app.run(debug=True, port=8000, use_reloader=False)
