@@ -14,7 +14,7 @@ RUN pip install -r requirements.txt
 EXPOSE 8000
 
 #安装playwright install chromium
-RUN playwright install chromium --headless
+RUN playwright install chromium
 
 # 启动 Gunicorn 服务器，增加超时时间和worker graceful shutdown 
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "--timeout", "120", "--graceful-timeout", "30", "--worker-class", "sync", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
