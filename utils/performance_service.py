@@ -2,6 +2,7 @@
 import platform
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 from utils.database_service import save_performance_analysis
@@ -13,6 +14,9 @@ _performance_lock = threading.Lock()
 # 用于存储每个分析任务的步骤进度
 _performance_steps = {}
 _steps_lock = threading.Lock()
+
+# 线程池用于异步执行分析任务
+_executor = ThreadPoolExecutor(max_workers=5)
 
 # Playwright 超时时间
 PLAYWRIGHT_TIMEOUT = 60000  # 60秒
@@ -178,6 +182,9 @@ def _analyze_with_playwright(url, task_id):
             # 用于收集请求数据
             all_requests = []
             
+            # 用于记录页面导航开始时间（用于计算相对时间）
+            page_start_time = None
+            
             def handle_request(request):
                 """记录每个请求的详细信息。"""
                 # 过滤掉内部 blob/data URL
@@ -185,16 +192,21 @@ def _analyze_with_playwright(url, task_id):
                 if url.startswith(('blob:', 'data:', 'chrome:', 'about:')):
                     return
                 
-                # 获取请求开始时间
-                request_start_time = time.time()
+                # 首次请求时记录页面导航开始时间（如果尚未设置）
+                nonlocal page_start_time
+                if page_start_time is None:
+                    page_start_time = time.time()
+                
+                # 获取请求开始时间（相对时间，单位：秒）
+                request_relative_time = time.time() - page_start_time
                 
                 req_data = {
                     'url': url,
                     'method': request.method,
                     'resource_type': request.resource_type,
                     'domain': _extract_domain(url),
-                    'timestamp': request_start_time,
-                    'start_time': request_start_time,
+                    'timestamp': request_relative_time,  # 改为相对时间
+                    'start_time': request_relative_time,
                     'redirect_response': None
                 }
                 all_requests.append(req_data)
@@ -285,12 +297,26 @@ def _analyze_with_playwright(url, task_id):
                 category = _classify_domain(domain, base_domain, main_domain)
                 req['category'] = category
                 
-                # 匹配资源耗时
+                # 匹配资源耗时 - 使用精确URL匹配（只匹配完整URL或域名部分）
+                req_url = req.get('url', '')
                 req_duration = 0
+                
                 for res in resources_data:
-                    if req['url'] in res['name'] or res['name'] in req['url']:
+                    res_name = res.get('name', '')
+                    # 优先完全匹配，否则匹配域名部分
+                    if req_url == res_name or req_url.startswith(res_name + '?') or res_name == req_url or res_name.startswith(req_url + '?'):
                         req_duration = res.get('duration', 0)
                         break
+                    # 也支持域名+完整路径匹配（防止URL参数导致的不匹配）
+                    req_domain = req.get('domain', '')
+                    res_domain = _extract_domain(res_name)
+                    if req_domain and req_domain == res_domain:
+                        # 如果域名相同，尝试匹配路径部分
+                        req_path = req_url.replace('http://', '').replace('https://', '').split('/', 1)
+                        res_path = res_name.replace('http://', '').replace('https://', '').split('/', 1)
+                        if len(req_path) > 1 and len(res_path) > 1 and req_path[1] == res_path[1]:
+                            req_duration = res.get('duration', 0)
+                            break
                 req['duration'] = req_duration
             
             result['requests'] = all_requests
@@ -309,9 +335,10 @@ def _analyze_with_playwright(url, task_id):
                 if not domain:
                     continue
                 
-                # 获取请求的开始时间
+                # 获取请求的开始时间（已经是相对时间，单位：秒）
                 start_time = req.get('start_time', req.get('timestamp', 0))
-                end_time = start_time + (duration / 1000)  # 转换为秒
+                # duration 是毫秒，转换为秒后计算结束时间
+                end_time = start_time + (duration / 1000)  # duration是毫秒，除以1000转为秒
                 
                 all_req_times.append({
                     'domain': domain,
@@ -453,25 +480,58 @@ def _analyze_with_playwright(url, task_id):
     return result
 
 
+def _run_analysis_task(url, task_id):
+    """在线程池中运行分析任务的包装函数。"""
+    try:
+        result = _analyze_with_playwright(url, task_id)
+        
+        # 保存到数据库
+        if not result.get('error'):
+            analysis_id = task_id.replace('task_', 'performance_')
+            save_performance_analysis(
+                analysis_id=analysis_id,
+                url=result.get('url', url),
+                total_requests=len(result.get('requests', [])),
+                total_duration_ms=int(result.get('timing', {}).get('total', 0)),
+                domain_stats=result.get('domain_duration_stats', []),
+                timing_data=result.get('timing', {}),
+                requests_data=result.get('requests', [])
+            )
+        
+        return result
+    except Exception as e:
+        # 保存错误结果
+        with _performance_lock:
+            _performance_results[task_id] = {
+                'task_id': task_id,
+                'url': url,
+                'error': str(e)
+            }
+        with _steps_lock:
+            _performance_steps[task_id] = {
+                'step': 'error',
+                'label': f'分析失败: {str(e)}',
+                'error': str(e)
+            }
+        return None
+
+
 def start_performance_analysis(url, task_id):
-    """启动网址请求分析任务。"""
+    """启动网址请求分析任务（异步执行）。"""
     normalized_url = _normalize_url(url)
-    result = _analyze_with_playwright(normalized_url, task_id)
     
-    # 保存到数据库
-    if not result.get('error'):
-        analysis_id = task_id.replace('task_', 'performance_')
-        save_performance_analysis(
-            analysis_id=analysis_id,
-            url=result.get('url', normalized_url),
-            total_requests=len(result.get('requests', [])),
-            total_duration_ms=int(result.get('timing', {}).get('total', 0)),
-            domain_stats=result.get('domain_duration_stats', []),
-            timing_data=result.get('timing', {}),
-            requests_data=result.get('requests', [])
-        )
+    # 立即更新步骤为 started 状态
+    _update_step(task_id, 'init')
     
-    return result
+    # 使用线程池异步执行，不阻塞主线程
+    _executor.submit(_run_analysis_task, normalized_url, task_id)
+    
+    # 立即返回任务已启动
+    return {
+        'task_id': task_id,
+        'status': 'started',
+        'message': '性能分析任务已启动'
+    }
 
 
 def get_performance_result(task_id):

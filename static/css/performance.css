@@ -283,6 +283,24 @@
     color: var(--text-dim);
     border-bottom: 1px solid var(--border-color);
     white-space: nowrap;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.requests-table th:hover {
+    background: rgba(56, 189, 248, 0.1);
+}
+
+.requests-table th.sort-asc::after {
+    content: ' ▲';
+    font-size: 0.7em;
+    color: #38bdf8;
+}
+
+.requests-table th.sort-desc::after {
+    content: ' ▼';
+    font-size: 0.7em;
+    color: #38bdf8;
 }
 
 .requests-table td {

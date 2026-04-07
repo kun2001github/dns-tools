@@ -109,7 +109,7 @@
 
 
             <div class="glass-card" style="margin-bottom: 30px;">
-                <h3>
+                <h3 style="position: relative;">
                     <span style="margin-right:8px;">📈</span> 域名分析情况
                     <span id="domainStatsSummary" class="domain-stats-summary"></span>
                     <button type="button" class="btn-copy" onclick="copyAllDomains(event)" title="复制域名" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 6px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
@@ -119,8 +119,8 @@
                         </svg>
                         <span style="color: #38bdf8; font-size: 0.8rem; font-weight: 500;">复制</span>
                     </button>
-                    <span id="copySuccessTip" style="margin-left: 12px; color: #22c55e; font-size: 0.8rem; font-weight: 500; opacity: 0; transition: opacity 0.3s ease; position: absolute; z-index: 1000; background: rgba(34, 197, 94, 0.9); padding: 6px 12px; border-radius: 6px; color: white;"></span>
                 </h3>
+                <span id="copySuccessTip" style="position: fixed; margin-left: 12px; color: #22c55e; font-size: 0.8rem; font-weight: 500; opacity: 0; transition: opacity 0.3s ease; z-index: 9999; background: rgba(34, 197, 94, 0.95); padding: 8px 14px; border-radius: 6px; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); pointer-events: none;"></span>
                 <!-- 排序按钮移到标题下方 -->
                 <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
                     <span style="color: var(--text-dim); font-size: 0.75rem;">排序:</span>
@@ -161,12 +161,12 @@
                     <table class="requests-table">
                         <thead>
                             <tr>
-                                <th style="width: 40%;">URL</th>
-                                <th style="width: 8%;">方法</th>
-                                <th style="width: 8%;">状态</th>
-                                <th style="width: 12%;">类型</th>
-                                <th style="width: 12%;">耗时</th>
-                                <th style="width: 20%;">域名</th>
+                                <th style="width: 40%; cursor: pointer;" onclick="sortRequests('url', this)">URL <span class="sort-icon"></span></th>
+                                <th style="width: 8%; cursor: pointer;" onclick="sortRequests('method', this)">方法 <span class="sort-icon"></span></th>
+                                <th style="width: 8%; cursor: pointer;" onclick="sortRequests('status', this)">状态 <span class="sort-icon"></span></th>
+                                <th style="width: 12%; cursor: pointer;" onclick="sortRequests('resource_type', this)">类型 <span class="sort-icon"></span></th>
+                                <th style="width: 12%; cursor: pointer;" onclick="sortRequests('duration', this)">耗时 <span class="sort-icon"></span></th>
+                                <th style="width: 20%; cursor: pointer;" onclick="sortRequests('domain', this)">域名 <span class="sort-icon"></span></th>
                             </tr>
                         </thead>
                         <tbody id="requestsTableBody">

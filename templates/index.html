@@ -43,17 +43,7 @@
                         <button onclick="addDNS('8.8.8.8 # 谷歌DNS')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">谷歌DNS</button>
                         <button onclick="addDNS('1.1.1.1 # Cloudflare')" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;">Cloudflare</button>
                     </div>
-                </div>
-                
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button onclick="saveDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; transition: all 0.3s ease;">
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                            <polyline points="7 3 7 8 15 8"></polyline>
-                        </svg>
-                        <span>保存配置</span>
-                    </button>
+                                   
                     <button onclick="loadDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; transition: all 0.3s ease;">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -62,13 +52,23 @@
                         </svg>
                         <span>加载配置</span>
                     </button>
+                    <button onclick="saveDNSConfig()" class="btn btn-outline" style="flex:1; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px; transition: all 0.3s ease;">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        <span>保存配置</span>
+                    </button>
                 </div>
+                
+
             </div>
 
             <!-- 中间：目标域名 -->
             <div class="glass-card">
                 <h3><span style="margin-right:8px;">🎯</span> 目标域名</h3>
-                <label>输入需要查询的网站（支持空格、逗号、换行分隔、顿号，支持URL格式）:</label>
+                <label>输入需要查询的网站（支持空格、逗号、换行分隔，支持URL格式）:</label>
                 <textarea id="domains" placeholder="example.com google.com&#10;https://www.google.com http://github.com/user/repo&#10;或: www.baidu.com,https://example.com?param=value,youtube.com" oninput="updatePreview()"></textarea>
                 
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -90,21 +90,13 @@
             </div>
 
             <!-- 右边：历史溯源 -->
-            <div class="glass-card" style="position: relative;">
+            <div class="glass-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h3 style="margin:0;"><span style="margin-right:8px;">📜</span> 历史溯源</h3>
-                    <div style="position: relative; display: flex; align-items: center; gap: 8px;">
-                        <div style="position: relative;">
-                            <svg style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--text-dim); pointer-events: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <path d="m21 21-4.35-4.35"></path>
-                            </svg>
-                            <input type="text" id="historySearch" placeholder="搜索历史域名..." oninput="searchHistory(this.value)" style="padding: 6px 10px 6px 30px; font-size: 0.8rem; border: 1px solid var(--border-color); border-radius: 6px; background: rgba(15, 23, 42, 0.6); color: var(--text-color); width: 120px; outline: none; transition: all 0.2s ease;">
-                        </div>
+                    <div style="position: relative;">
                         <button id="clearHistoryBtn" onclick="clearHistory()" class="btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 4px 12px; font-size: 0.8rem; border-radius: 4px;">清空全部</button>
                     </div>
                 </div>
-                <div id="historySearchResults" style="display: none; margin-top: 4px; padding: 8px; background: #0f172a; border: 1px solid var(--accent-color); border-radius: 6px; position: absolute; top: 50px; left: 8px; right: 8px; max-height: calc(100% - 60px); overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>
                 <div id="historyList" class="history-panel"></div>
             </div>
         </div>
@@ -117,7 +109,7 @@
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 12px; justify-content: flex-start; align-items: flex-start; margin: 30px 0; width: 100%;">
-            <div style="position: relative; display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 68px;">
+            <div style="position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 68px;">
                 <button onclick="toggleViewMode()" id="viewToggleBtn" class="btn btn-outline" style="font-size: 1.2rem; padding: 16px 40px; border-radius: 50px; letter-spacing: 2px; border: 2px solid var(--accent-color); color: var(--accent-color); transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;">
                     <svg id="viewToggleIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 22px; height: 22px; transition: all 0.3s ease;">
                         <rect x="3" y="3" width="7" height="7"></rect>
@@ -128,14 +120,7 @@
                     <span id="viewToggleText">视图切换</span>
                 </button>
 
-                <button onclick="queryDNS()" class="btn btn-primary query-main-btn">RUN QUERY</button>
-                
-                <button onclick="openPerformanceTab()" class="btn btn-outline" style="font-size: 1rem; padding: 16px 24px; border-radius: 50px; border: 2px solid var(--accent-color); color: var(--accent-color); transition: all 0.3s ease; display: flex; align-items: center; gap: 8px;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
-                        <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9"></path>
-                    </svg>
-                    <span>网址请求分析</span>
-                </button>
+                <button onclick="queryDNS()" class="btn btn-primary query-main-btn" style="position: absolute; left: 50%; transform: translateX(-50%);">RUN QUERY</button>
             </div>
 
             <div id="verticalViewHint" style="display: block; text-align: left; color: var(--text-dim); font-size: 0.85rem; line-height: 1.4; max-width: 980px;">
@@ -146,7 +131,7 @@
         </div>
 
         <div class="footer-info">
-            StandardSoftware IT TOOLBOX &copy; 2026 // DNS BATCH ANALYZER V2.3
+            StandardSoftware IT TOOLBOX &copy; 2026 // DNS BATCH ANALYZER V2.2
         </div>
 
         <!-- 返回顶部按钮 -->
@@ -164,18 +149,6 @@
     <script src="{{ url_for('static', filename='js/history.js') }}"></script>
     <script src="{{ url_for('static', filename='js/query.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script>
-        // 使用 window.open 带窗口名自动复用已存在的标签页
-        function openPerformanceTab() {
-            // 使用固定窗口名 'dns_tools_performance'，会自动复用同名标签页
-            var newWindow = window.open('/performance', 'dns_tools_performance');
-            
-            // 如果被浏览器拦截（返回 null），则在当前标签页跳转
-            if (!newWindow || newWindow === null) {
-                window.location.href = '/performance';
-            }
-        }
-    </script>
 </body>
 
 </html>

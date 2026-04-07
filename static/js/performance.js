@@ -9,6 +9,10 @@ let allRequests = [];
 let currentFilter = 'all';
 let allHistoryData = []; // 存储所有历史记录用于搜索
 
+// 表格排序状态
+let currentSortColumn = null;
+let currentSortDirection = 'asc';
+
 // 开始分析
 async function startAnalysis() {
     const urlInput = document.getElementById('urlInput');
@@ -452,6 +456,30 @@ function renderRequestsTable() {
         });
     }
     
+    // 排序请求
+    if (currentSortColumn) {
+        filteredRequests = [...filteredRequests].sort((a, b) => {
+            let valA = a[currentSortColumn];
+            let valB = b[currentSortColumn];
+            
+            if (valA === undefined || valA === null) valA = '';
+            if (valB === undefined || valB === null) valB = '';
+            
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return currentSortDirection === 'asc' ? valA - valB : valB - valA;
+            }
+            
+            valA = String(valA).toLowerCase();
+            valB = String(valB).toLowerCase();
+            
+            if (currentSortDirection === 'asc') {
+                return valA.localeCompare(valB);
+            } else {
+                return valB.localeCompare(valA);
+            }
+        });
+    }
+    
     // 更新统计信息
     document.getElementById('totalRequestsCount').textContent = filteredRequests.length;
     
@@ -478,6 +506,23 @@ function renderRequestsTable() {
     });
     
     tbody.innerHTML = rows.join('');
+}
+
+// 排序请求表格
+function sortRequests(column, thElement) {
+    if (currentSortColumn === column) {
+        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSortColumn = column;
+        currentSortDirection = 'asc';
+    }
+    
+    document.querySelectorAll('.requests-table th').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+    });
+    thElement.classList.add(currentSortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+    
+    renderRequestsTable();
 }
 
 // 获取状态样式类
@@ -749,6 +794,83 @@ async function clearPerformanceHistory() {
     }
 }
 
+// 跨平台复制函数 - 支持 Windows、Mac、移动端
+function copyToClipboard(text, event) {
+    return new Promise((resolve, reject) => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                resolve(true);
+            }).catch(() => {
+                resolve(fallbackCopy(text));
+            });
+        } else {
+            resolve(fallbackCopy(text));
+        }
+    });
+}
+
+// 备选复制方案 - 兼容所有浏览器和移动端
+function fallbackCopy(text) {
+    // 创建临时元素
+    const textarea = document.createElement('textarea');
+    const button = document.createElement('button');
+    const container = document.createElement('div');
+    
+    // 设置样式隐藏但可操作
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '-9999px';
+    
+    // 设置 textarea
+    textarea.value = text;
+    textarea.style.width = '2em';
+    textarea.style.height = '2em';
+    textarea.style.padding = '0';
+    textarea.style.margin = '0';
+    textarea.style.border = 'none';
+    textarea.style.outline = 'none';
+    textarea.style.boxShadow = 'none';
+    textarea.style.background = 'transparent';
+    textarea.style.fontSize = '16px'; // 移动端需要足够大的字体
+    textarea.style.color = 'transparent';
+    textarea.style.textIndent = '-9999px';
+    textarea.style.whiteSpace = 'pre-wrap';
+    textarea.style.wordWrap = 'break-word';
+    
+    // 尝试使用 select() 方法
+    try {
+        document.body.appendChild(container);
+        container.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        
+        // 尝试复制
+        const successful = document.execCommand('copy');
+        document.body.removeChild(container);
+        return successful;
+    } catch (err) {
+        // 尝试使用 Range API
+        try {
+            document.body.appendChild(container);
+            container.appendChild(textarea);
+            
+            const range = document.createRange();
+            range.selectNodeContents(textarea);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            
+            const successful = document.execCommand('copy');
+            selection.removeAllRanges();
+            document.body.removeChild(container);
+            return successful;
+        } catch (e) {
+            document.body.removeChild(container);
+            return false;
+        }
+    }
+}
+
 // 复制域名（根据当前筛选状态）
 function copyAllDomains(event) {
     const allDomainStats = window._domainDurationStats || [];
@@ -759,7 +881,6 @@ function copyAllDomains(event) {
         return;
     }
     
-    // 根据筛选状态过滤域名
     let domainStats;
     let filterLabel;
     if (currentFilter === 'all') {
@@ -770,7 +891,6 @@ function copyAllDomains(event) {
         filterLabel = currentFilter === 'main' ? '请求域名' : currentFilter === 'related' ? '同域域名' : '三方域名';
     }
     
-    // 提取域名列表
     const domains = domainStats.map(item => item.domain).filter(d => d);
     
     if (domains.length === 0) {
@@ -780,34 +900,89 @@ function copyAllDomains(event) {
     
     const domainText = domains.join('\n');
     
-    navigator.clipboard.writeText(domainText).then(() => {
-        showCopyTip(`✅ 已复制 ${domains.length} 个域名（${filterLabel}）`, 'success', event);
+    copyToClipboard(domainText, event).then((success) => {
+        if (success) {
+            showCopyTip(`✅ 已复制 ${domains.length} 个域名（${filterLabel}）`, 'success', event);
+        } else {
+            showCopyTip('复制失败，请长按选择复制', 'error', event);
+        }
     }).catch(() => {
-        showCopyTip('复制失败', 'error', event);
+        showCopyTip('复制失败，请长按选择复制', 'error', event);
     });
 }
 
-// 显示复制提示（跟随鼠标位置）
+// 显示复制提示（动态创建浮动元素）
 function showCopyTip(message, type, event) {
-    const tipEl = document.getElementById('copySuccessTip');
-    if (!tipEl) return;
+    const existingTip = document.querySelector('.dynamic-copy-tip');
+    if (existingTip) existingTip.remove();
     
-    tipEl.textContent = message;
-    tipEl.style.color = type === 'success' ? '#fff' : '#ef4444';
-    tipEl.style.background = type === 'success' ? 'rgba(34, 197, 94, 0.95)' : 'rgba(239, 68, 68, 0.95)';
-    tipEl.style.opacity = '1';
+    const tip = document.createElement('div');
+    tip.className = 'dynamic-copy-tip';
+    tip.textContent = message;
     
-    // 跟随鼠标位置
-    if (event && event.clientX && event.clientY) {
-        tipEl.style.left = (event.clientX + 10) + 'px';
-        tipEl.style.top = (event.clientY + 10) + 'px';
-        tipEl.style.position = 'fixed';
-        tipEl.style.marginLeft = '0';
+    const bg = type === 'success' ? 'rgba(34, 197, 94, 0.95)' : 'rgba(239, 68, 68, 0.95)';
+    
+    Object.assign(tip.style, {
+        position: 'fixed',
+        zIndex: '999999',
+        background: bg,
+        color: '#fff',
+        padding: '8px 16px',
+        borderRadius: '8px',
+        fontSize: '13px',
+        fontWeight: '600',
+        fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+        whiteSpace: 'nowrap',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        pointerEvents: 'none',
+        opacity: '0',
+        transition: 'opacity 0.2s ease',
+    });
+    
+    document.body.appendChild(tip);
+    
+    const tipRect = tip.getBoundingClientRect();
+    const tipW = tipRect.width || 150;
+    const tipH = tipRect.height || 32;
+    
+    let x = 0, y = 0;
+    
+    if (event) {
+        if (event.clientX !== undefined) {
+            x = event.clientX;
+            y = event.clientY;
+        } else if (event.touches && event.touches.length > 0) {
+            x = event.touches[0].clientX;
+            y = event.touches[0].clientY;
+        } else if (event.changedTouches && event.changedTouches.length > 0) {
+            x = event.changedTouches[0].clientX;
+            y = event.changedTouches[0].clientY;
+        } else if (event.target) {
+            const rect = event.target.getBoundingClientRect();
+            x = rect.left + rect.width / 2;
+            y = rect.bottom;
+        }
     }
     
+    let left = x - tipW / 2;
+    let top = y + 10;
+    
+    if (left < 10) left = 10;
+    if (left + tipW > window.innerWidth - 10) left = window.innerWidth - tipW - 10;
+    if (top + tipH > window.innerHeight) top = y - tipH - 10;
+    if (top < 10) top = 10;
+    
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
+    
+    requestAnimationFrame(() => {
+        tip.style.opacity = '1';
+    });
+    
     setTimeout(() => {
-        tipEl.style.opacity = '0';
-    }, 2000);
+        tip.style.opacity = '0';
+        setTimeout(() => tip.remove(), 300);
+    }, 1800);
 }
 
 // 复制单个域名
@@ -816,10 +991,14 @@ function copySingleDomain(event, domain) {
     
     event.stopPropagation();
     
-    navigator.clipboard.writeText(domain).then(() => {
-        showCopyTip(`✅ 已复制：${domain}`, 'success', event);
+    copyToClipboard(domain, event).then((success) => {
+        if (success) {
+            showCopyTip(`✅ 已复制：${domain}`, 'success', event);
+        } else {
+            showCopyTip('复制失败，请长按选择复制', 'error', event);
+        }
     }).catch(() => {
-        showCopyTip('复制失败', 'error', event);
+        showCopyTip('复制失败，请长按选择复制', 'error', event);
     });
 }
 
