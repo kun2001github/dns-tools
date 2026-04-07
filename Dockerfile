@@ -11,20 +11,21 @@ COPY . /app
 
 #安装 chromium 依赖核心库
 RUN apt-get update && apt-get install -y \
-    libnspr4 \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
+    libxcursor1 \
+    libgtk-3-0 \
+    libgdk-pixbuf2.0-0 \
+    libx11-xcb1 \
+    libxcb-shm0 \
+    libxcb-randr0 \
+    libxcb-image0 \
+    libxcb-xfixes0 \
+    libxcb-shape0 \
+    libxcb-render0 \
+    libxcb-keysyms1 \
+    libxcb-xinerama0 \
+    libxss1 \
+    libsm6 \
+    libice6 \
     libasound2
 
 # 安装依赖
@@ -34,8 +35,8 @@ RUN pip install -r requirements.txt
 EXPOSE 8000
 
 #安装playwright install chromium
+RUN playwright install-deps
 RUN playwright install chromium
-RUN playwright install 
 
 
 # 启动 Gunicorn 服务器，增加超时时间和worker graceful shutdown 
