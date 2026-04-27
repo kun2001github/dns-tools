@@ -7,3 +7,7 @@ __pycache__
 *.vscode
 .playwright*
 config.json
+dev-and-test-log/*
+history/dns_history.db
+config/last_query_result.json
+config/query_progress.json

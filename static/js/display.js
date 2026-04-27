@@ -590,6 +590,116 @@ function bindARecordHoverHighlight(root) {
 }
 
 /**
+ * 域名导航栏滚动高亮和点击处理
+ */
+let domainNavScrollHandlerBound = false;
+let domainNavBarElement = null;
+
+// 获取结果区域内的域名元素（排除导航栏自身的 .domain-nav-item）
+function getDomainResultElements(container) {
+    return Array.from(container.querySelectorAll('.horizontal-domain-row[data-domain], .result-card[data-domain]'));
+}
+
+function bindDomainNavScrollHighlight(container) {
+    if (domainNavScrollHandlerBound) return;
+
+    const updateActiveDomain = () => {
+        if (!domainNavBarElement || !document.body.contains(domainNavBarElement)) return;
+        const navBarRect = domainNavBarElement.getBoundingClientRect();
+        const navBarBottom = navBarRect.bottom;
+
+        // 仅遍历结果区域的域名元素，排除导航栏内的项
+        const domainElements = getDomainResultElements(container);
+        let activeDomain = null;
+
+        for (const el of domainElements) {
+            const rect = el.getBoundingClientRect();
+            if (rect.top <= navBarBottom + 20) {
+                activeDomain = el.getAttribute('data-domain');
+            }
+        }
+
+        // 更新导航栏高亮
+        domainNavBarElement.querySelectorAll('.domain-nav-item').forEach(item => {
+            item.classList.toggle('active', item.getAttribute('data-domain') === activeDomain);
+        });
+    };
+
+    window.addEventListener('scroll', updateActiveDomain, { passive: true });
+    domainNavScrollHandlerBound = true;
+}
+
+/**
+ * 渲染域名导航栏
+ */
+function renderDomainNavBar(container, domainsToRender, resultsData) {
+    let navBar = container.querySelector('#domain-nav-bar');
+
+    const navContentHtml = `
+        <span class="domain-nav-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+            域名导航
+        </span>
+        <span class="domain-nav-bar-divider"></span>
+        ${domainsToRender.map(domain => {
+            const hasResult = resultsData && resultsData[domain];
+            return `<span class="domain-nav-item${hasResult ? '' : ' no-result'}" data-domain="${escapeHtml(domain)}">${escapeHtml(domain)}</span>`;
+        }).join('')}
+    `;
+
+    if (!navBar) {
+        navBar = document.createElement('div');
+        navBar.id = 'domain-nav-bar';
+        navBar.className = 'domain-nav-bar';
+
+        // 插入到 stats-bar 之后
+        const statsBar = container.querySelector('#stats-bar');
+        if (statsBar && statsBar.nextSibling) {
+            container.insertBefore(navBar, statsBar.nextSibling);
+        } else if (statsBar) {
+            container.appendChild(navBar);
+        } else {
+            container.insertBefore(navBar, container.firstChild);
+        }
+    }
+
+    navBar.innerHTML = navContentHtml;
+    domainNavBarElement = navBar;
+
+    // 绑定点击事件：直接操作 DOM 节点重排（避免依赖 data-last-result 导致历史查看场景错乱）
+    navBar.querySelectorAll('.domain-nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const domain = item.getAttribute('data-domain');
+            if (!domain) return;
+
+            // 更新活跃状态
+            navBar.querySelectorAll('.domain-nav-item').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+
+            // 从结果区域中找到对应域名元素（排除导航栏项）
+            const allDomainEls = getDomainResultElements(container);
+            const targetEl = allDomainEls.find(el => el.getAttribute('data-domain') === domain);
+            if (!targetEl) return;
+
+            // 将目标元素移到结果区的第一位（同父级排序）
+            const firstDomainEl = allDomainEls[0];
+            if (firstDomainEl && firstDomainEl !== targetEl && firstDomainEl.parentNode) {
+                firstDomainEl.parentNode.insertBefore(targetEl, firstDomainEl);
+            }
+
+            // 滚动到目标元素
+            const navBarHeight = navBar.offsetHeight + 20;
+            const targetTop = targetEl.getBoundingClientRect().top + window.scrollY - navBarHeight;
+            window.scrollTo({ top: targetTop, behavior: 'smooth' });
+        });
+    });
+}
+
+/**
  * 渲染查询统计信息条
  * 使用唯一ID防止重复创建，确保切换视图时保持稳定
  */
@@ -714,6 +824,11 @@ function renderResults(data, domainOrder, forceRecreateStats = false) {
         renderStatsBar(container, queryStats);
     }
 
+    // 渲染域名导航栏
+    if (domainsToRender.length > 0) {
+        renderDomainNavBar(container, domainsToRender, resultsData);
+    }
+
     if (window.AppState.isHorizontalView) {
         // 横排视图模式
         container.classList.add('horizontal-view');
@@ -727,6 +842,7 @@ function renderResults(data, domainOrder, forceRecreateStats = false) {
     bindARecordHoverHighlight(container);
     bindIpInfoRequery(container);
     refreshIpInfoTags(container);
+    bindDomainNavScrollHighlight(container);
 }
 
 /**
@@ -739,6 +855,7 @@ function renderHorizontalView(container, resultsData, domainsToRender, dnsServer
 
         const row = document.createElement('div');
         row.className = 'horizontal-domain-row';
+        row.setAttribute('data-domain', domain);
 
         // 第一行：域名
         const domainCell = document.createElement('div');
@@ -835,6 +952,7 @@ function renderCardView(container, resultsData, domainsToRender, dnsServers) {
 
         const card = document.createElement('div');
         card.className = 'result-card glass-card';
+        card.setAttribute('data-domain', domain);
         let html = `<div class="domain-title">${domain}</div>`;
 
         const consistency = buildAConsistency(results, dnsServers);

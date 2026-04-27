@@ -222,102 +222,199 @@ function generateHistoryDetailContent(record, uniqueId) {
 let gHistoryRecords = [];
 
 /**
- * 搜索历史记录中的域名
+ * 搜索历史记录：同时支持域名和 IP 地址匹配
+ * - 域名匹配：检查 record.domains
+ * - IP 匹配：递归遍历 time_nodes[*].results[domain][dnsServer].A，可定位到具体时间节点
  */
 function searchHistory(keyword) {
     const searchResultsDiv = document.getElementById('historySearchResults');
     const historyList = document.getElementById('historyList');
-    
+
     if (!keyword || !keyword.trim()) {
         searchResultsDiv.style.display = 'none';
         // 显示所有历史记录
         displayHistory(gHistoryRecords);
         return;
     }
-    
+
     const searchTerm = keyword.toLowerCase().trim();
-    const matchedRecords = [];
-    
-    // 搜索匹配的记录
+    const domainMatches = []; // { record, index, domain, nodeId }
+    const ipMatches = [];     // { record, index, domain, ip, nodeId }
+
     gHistoryRecords.forEach((record, index) => {
         const domains = record.domains || [];
-        const matchedDomains = domains.filter(d => d.toLowerCase().includes(searchTerm));
-        
-        if (matchedDomains.length > 0) {
-            matchedRecords.push({ record, index, matchedDomains });
-        }
+        const timeNodes = Array.isArray(record.time_nodes) ? [...record.time_nodes].sort((a, b) => String(b.id).localeCompare(String(a.id))) : [];
+        const latestNodeId = timeNodes.length > 0 ? timeNodes[0].id : (record.id || '');
+
+        // 1. 域名匹配
+        domains.forEach(d => {
+            if (d && d.toLowerCase().includes(searchTerm)) {
+                domainMatches.push({ record, index, domain: d, nodeId: latestNodeId });
+            }
+        });
+
+        // 2. IP 匹配：遍历所有时间节点的 A 记录
+        // 同一 (domain, ip) 组合只保留最新节点
+        const ipDomainKeyMap = new Map();
+        timeNodes.forEach(node => {
+            if (!node || !node.results) return;
+            Object.entries(node.results).forEach(([domain, serverResults]) => {
+                if (!serverResults || typeof serverResults !== 'object') return;
+                Object.values(serverResults).forEach(rec => {
+                    if (!rec || !rec.A) return;
+                    const ips = Array.isArray(rec.A) ? rec.A : [rec.A];
+                    ips.forEach(rawIp => {
+                        const cleaned = window.DNSUtils.cleanARecordValue(String(rawIp || ''));
+                        if (!window.DNSUtils.isLikelyIPv4(cleaned)) return;
+                        if (!cleaned.toLowerCase().includes(searchTerm)) return;
+                        const key = `${domain}|${cleaned}`;
+                        if (!ipDomainKeyMap.has(key)) {
+                            ipDomainKeyMap.set(key, { domain, ip: cleaned, nodeId: node.id });
+                        }
+                    });
+                });
+            });
+        });
+        ipDomainKeyMap.forEach(({ domain, ip, nodeId }) => {
+            ipMatches.push({ record, index, domain, ip, nodeId });
+        });
     });
-    
-    if (matchedRecords.length === 0) {
+
+    const totalMatches = domainMatches.length + ipMatches.length;
+
+    if (totalMatches === 0) {
         searchResultsDiv.innerHTML = `<div style="color: var(--text-dim); font-size: 0.85rem; padding: 10px; text-align: center;">未找到包含 "${keyword}" 的历史记录</div>`;
         searchResultsDiv.style.display = 'block';
         return;
     }
-    
-    // 显示搜索结果
-    let html = `<div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">找到 ${matchedRecords.length} 条匹配记录</div>`;
-    
-    // 动态计算滚动区域最大高度：每条约60px，最多200px
-    const maxHeight = Math.min(matchedRecords.length * 60, 200);
-    const needScroll = matchedRecords.length > 3;
+
+    // 按类型分组展示搜索结果
+    let html = `<div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(56, 189, 248, 0.2);">找到 ${totalMatches} 条匹配结果<span style="margin-left: 6px; color: var(--accent-color);">(域名: ${domainMatches.length} | IP: ${ipMatches.length})</span></div>`;
+
+    // 动态滚动区域：每条约 64px，最多 260px
+    const maxHeight = Math.min(totalMatches * 64, 260);
+    const needScroll = totalMatches > 3;
     const scrollStyle = needScroll ? `overflow-y: auto; max-height: ${maxHeight}px;` : '';
     html += `<div style="${scrollStyle}">`;
-    
-    matchedRecords.forEach(({ record, index, matchedDomains }) => {
-        const uniqueId = `h${index}`;
-        const recordId = record.id || record.time_nodes?.[0]?.id || '';
-        
-        matchedDomains.forEach(domain => {
-            html += `<div class="search-result-item" onclick="jumpToHistory('${uniqueId}', '${recordId}', '${domain}')" 
-                style="cursor: pointer; padding: 8px 10px; margin: 4px 0; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; font-size: 0.8rem; color: var(--text-color); transition: all 0.2s ease;"
-                onmouseover="this.style.background='rgba(56, 189, 248,0.25)';this.style.borderColor='var(--accent-color)'" 
-                onmouseout="this.style.background='rgba(56, 189, 248,0.15)';this.style.borderColor='rgba(56, 189, 248,0.3)'">
-                <span style="color: var(--text-dim); font-size: 0.75rem;">📍 ${record.date} ${record.time}</span>
-                <div style="color: var(--accent-color); font-weight: 600; margin-top: 2px;">${domain}</div>
+
+    // 域名结果
+    if (domainMatches.length > 0) {
+        html += `<div class="search-group-label">🌐 域名匹配</div>`;
+        domainMatches.forEach(({ record, index, domain, nodeId }) => {
+            const uniqueId = `h${index}`;
+            html += `<div class="search-result-item search-result-domain" onclick="jumpToHistory('${uniqueId}', '${nodeId}', '${escapeAttr(domain)}')">
+                <span class="search-result-time">📍 ${record.date} ${record.time}</span>
+                <div class="search-result-main">
+                    <span class="search-result-badge badge-domain">DOMAIN</span>
+                    <span class="search-result-label">${domain}</span>
+                </div>
             </div>`;
         });
-    });
-    
+    }
+
+    // IP 结果
+    if (ipMatches.length > 0) {
+        html += `<div class="search-group-label">🎯 IP 匹配</div>`;
+        ipMatches.forEach(({ record, index, domain, ip, nodeId }) => {
+            const uniqueId = `h${index}`;
+            html += `<div class="search-result-item search-result-ip" onclick="jumpToHistory('${uniqueId}', '${nodeId}', '${escapeAttr(domain)}')">
+                <span class="search-result-time">📍 ${record.date} ${record.time}</span>
+                <div class="search-result-main">
+                    <span class="search-result-badge badge-ip">IP</span>
+                    <span class="search-result-label">${ip}</span>
+                    <span class="search-result-arrow">→</span>
+                    <span class="search-result-domain-text">${domain}</span>
+                </div>
+            </div>`;
+        });
+    }
+
     html += '</div>';
-    
+
     searchResultsDiv.innerHTML = html;
     searchResultsDiv.style.display = 'block';
 }
 
+// 属性字符串转义（用于 onclick… 嵌入值）
+function escapeAttr(str) {
+    return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
 /**
  * 跳转到指定的历史记录
+ * @param {string} uniqueId - 历史项的唯一 ID（形如 h0、h1）
+ * @param {string} nodeId - 时间节点 ID（之前是 recordId，现改为 nodeId 支持 IP 匹配时定位到具体节点）
+ * @param {string} domain - 要定位至第一位的域名
  */
-function jumpToHistory(uniqueId, recordId, domain) {
+function jumpToHistory(uniqueId, nodeId, domain) {
     // 隐藏搜索结果
     const searchResultsDiv = document.getElementById('historySearchResults');
     searchResultsDiv.style.display = 'none';
-    
+
     // 清空搜索框
     document.getElementById('historySearch').value = '';
-    
+
     // 查找对应的记录
     const recordIndex = parseInt(uniqueId.replace('h', ''));
     const record = gHistoryRecords[recordIndex];
-    
     if (!record) return;
-    
-    // 显示该记录的第一个时间节点详情
-    if (record.time_nodes && record.time_nodes.length > 0) {
-        const nodeId = record.time_nodes[0].id;
-        loadTimelineDetail(uniqueId, nodeId);
-        
-        // 滚动到结果区域
-        setTimeout(() => {
-            const detailsContainer = document.getElementById(`timeline-details-${uniqueId}`);
-            if (detailsContainer) {
-                detailsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }, 100);
-    } else {
-        // 旧格式记录 - 直接显示
-        toggleHistoryDetail(uniqueId, recordId);
+
+    // 自动展开历史项详情面板（如未展开）
+    const detailPanel = document.getElementById(`detail-${uniqueId}`);
+    if (detailPanel && !detailPanel.classList.contains('show')) {
+        detailPanel.classList.add('show');
     }
-};
+
+    // 加载指定时间节点（如果没传 nodeId 则用第一个）
+    let targetNodeId = nodeId;
+    if (!targetNodeId && record.time_nodes && record.time_nodes.length > 0) {
+        targetNodeId = record.time_nodes[0].id;
+    }
+
+    if (targetNodeId && record.time_nodes && record.time_nodes.length > 0) {
+        loadTimelineDetail(uniqueId, targetNodeId);
+
+        // 渲染完成后：将指定域名通过导航栏置顶，再滚动到结果区域
+        setTimeout(() => {
+            focusDomainInResult(domain);
+        }, 150);
+    } else {
+        // 旧格式记录：详情面板已在上面展开，直接定位域名
+        setTimeout(() => {
+            focusDomainInResult(domain);
+        }, 150);
+    }
+}
+
+/**
+ * 利用域名导航栏机制，将指定域名置顶并滚动显示
+ * - 在 #result 中查找 #domain-nav-bar 中对应的 .domain-nav-item 并触发点击
+ * - 如未找到导航栏（旧格式或卡片视图无导航栏），则直接滚动到该域名的结果元素
+ */
+function focusDomainInResult(domain) {
+    if (!domain) return;
+    const mainResult = document.getElementById('result');
+    if (!mainResult) return;
+
+    const navBar = mainResult.querySelector('#domain-nav-bar');
+    if (navBar) {
+        const navItem = Array.from(navBar.querySelectorAll('.domain-nav-item'))
+            .find(el => el.getAttribute('data-domain') === domain);
+        if (navItem) {
+            navItem.click();
+            return;
+        }
+    }
+
+    // 导航栏不存在或未找到对应项：直接滚动到该域名元素
+    const targetEl = mainResult.querySelector(`.horizontal-domain-row[data-domain="${domain}"], .result-card[data-domain="${domain}"]`);
+    if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        // 什么都没找到：退而滚动到 #result
+        mainResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
 
 /**
  * 加载时间轴节点的详细解析结果
